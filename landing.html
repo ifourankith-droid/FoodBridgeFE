@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FoodBridge — Rescue food. Restore hope.</title>
+    <meta
+      name="description"
+      content="FoodBridge connects restaurants, hotels and hosts with volunteers and NGOs so surplus meals reach people who need them — not landfills."
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+
+    <style>
+      :root {
+        --primary: #d87757;
+        --primary-deep: #b65c3f;
+        --primary-bright: #e2906c;
+        --primary-soft: #fdf0e7;
+        --success: #1e9e5c;
+        --success-deep: #146c43;
+        --success-soft: #e7f7ee;
+        --orange: #ff7a3d;
+        --orange-soft: #ffeee3;
+        --cream: #faf8f6;
+        --ink: #241e1a;
+        --muted: #7a6f65;
+        --line: #e8e1d8;
+        --surface: #ffffff;
+        --radius: 20px;
+        --shadow: 0 10px 30px rgba(20, 60, 35, 0.08);
+        --shadow-lg: 0 24px 60px rgba(20, 60, 35, 0.16);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: 'Poppins', system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--cream);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+      img {
+        max-width: 100%;
+      }
+      .wrap {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      section {
+        position: relative;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--primary-deep);
+        background: var(--primary-soft);
+        padding: 7px 14px;
+        border-radius: 999px;
+      }
+      .section-title {
+        font-size: clamp(1.8rem, 3.4vw, 2.7rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        margin: 18px 0 12px;
+      }
+      .section-sub {
+        color: var(--muted);
+        font-size: 1.05rem;
+        max-width: 620px;
+      }
+      .center {
+        text-align: center;
+      }
+      .center .section-sub {
+        margin-inline: auto;
+      }
+
+      /* ---------- Buttons ---------- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        font-family: inherit;
+        font-size: 0.98rem;
+        font-weight: 600;
+        padding: 13px 26px;
+        border-radius: 14px;
+        border: 1.5px solid transparent;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+        color: #fff;
+        box-shadow: 0 10px 24px rgba(216, 119, 87, 0.35);
+      }
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 16px 32px rgba(216, 119, 87, 0.45);
+      }
+      .btn-ghost {
+        background: var(--surface);
+        color: var(--primary-deep);
+        border-color: var(--line);
+      }
+      .btn-ghost:hover {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        transform: translateY(-2px);
+      }
+      .btn-light {
+        background: rgba(255, 255, 255, 0.16);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(6px);
+      }
+      .btn-light:hover {
+        background: rgba(255, 255, 255, 0.26);
+        transform: translateY(-2px);
+      }
+      .btn-white {
+        background: #fff;
+        color: var(--primary-deep);
+      }
+      .btn-white:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+      }
+
+      /* ---------- Navbar ---------- */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: color-mix(in srgb, var(--cream) 82%, transparent);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 72px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-weight: 800;
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+      }
+      .brand-logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 1.1rem;
+        background: linear-gradient(135deg, var(--primary), var(--orange));
+        box-shadow: 0 8px 18px rgba(216, 119, 87, 0.35);
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+      }
+      .nav-links a.link {
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--muted);
+        transition: color 0.15s ease;
+      }
+      .nav-links a.link:hover {
+        color: var(--ink);
+      }
+      .nav-cta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .nav-cta .btn {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+      }
+      .menu-toggle {
+        display: none;
+        background: none;
+        border: 0;
+        font-size: 1.4rem;
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      /* ---------- Hero ---------- */
+      .hero {
+        padding: clamp(48px, 8vw, 96px) 0 clamp(60px, 8vw, 110px);
+        overflow: hidden;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 56px;
+        align-items: center;
+      }
+      .hero h1 {
+        font-size: clamp(2.4rem, 5.2vw, 4rem);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+        margin: 20px 0 20px;
+      }
+      .hero h1 .accent {
+        background: linear-gradient(120deg, var(--primary), var(--orange));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .hero p.lead {
+        font-size: 1.15rem;
+        color: var(--muted);
+        max-width: 520px;
+        margin-bottom: 30px;
+      }
+      .hero-actions {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .hero-trust {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        margin-top: 34px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .hero-trust .avatars {
+        display: flex;
+      }
+      .hero-trust .avatars span {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 2.5px solid var(--cream);
+        margin-left: -10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+      .hero-trust .avatars span:first-child {
+        margin-left: 0;
+      }
+
+      /* Hero visual — floating cards over a gradient orb */
+      .hero-visual {
+        position: relative;
+        min-height: 440px;
+      }
+      .orb {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 92%;
+        aspect-ratio: 1;
+        border-radius: 40% 60% 62% 38% / 45% 42% 58% 55%;
+        background: linear-gradient(135deg, var(--primary), var(--orange));
+        box-shadow: 0 40px 90px rgba(216, 119, 87, 0.4);
+        animation: morph 9s ease-in-out infinite;
+      }
+      @keyframes morph {
+        0%,
+        100% {
+          border-radius: 40% 60% 62% 38% / 45% 42% 58% 55%;
+        }
+        50% {
+          border-radius: 58% 42% 38% 62% / 55% 58% 42% 45%;
+        }
+      }
+      .orb i {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: fit-content;
+        height: fit-content;
+        font-size: 8rem;
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .float-card {
+        position: absolute;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px 16px;
+        box-shadow: var(--shadow-lg);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: floaty 5s ease-in-out infinite;
+      }
+      @keyframes floaty {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-12px);
+        }
+      }
+      .float-card .fc-ic {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-size: 1rem;
+        color: #fff;
+        flex: none;
+      }
+      .float-card .fc-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        line-height: 1.2;
+      }
+      .float-card .fc-sub {
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .fc-1 {
+        top: 16px;
+        left: -18px;
+        animation-delay: 0s;
+      }
+      .fc-2 {
+        top: 45%;
+        right: -22px;
+        animation-delay: 1.2s;
+      }
+      .fc-3 {
+        bottom: 18px;
+        left: 8px;
+        animation-delay: 2.2s;
+      }
+
+      /* ---------- Stats bar ---------- */
+      .stats {
+        background: var(--ink);
+        color: #fff;
+        border-radius: var(--radius);
+        padding: 34px 24px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        margin-top: -40px;
+        position: relative;
+        z-index: 2;
+        box-shadow: var(--shadow-lg);
+      }
+      .stat {
+        text-align: center;
+        position: relative;
+      }
+      .stat + .stat::before {
+        content: '';
+        position: absolute;
+        left: -10px;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 44px;
+        width: 1px;
+        background: rgba(255, 255, 255, 0.14);
+      }
+      .stat .num {
+        font-size: clamp(1.7rem, 3.2vw, 2.4rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .stat .num .plus {
+        color: var(--primary-bright);
+      }
+      .stat .lbl {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        margin-top: 2px;
+      }
+
+      /* ---------- Generic section spacing ---------- */
+      .block {
+        padding: clamp(60px, 9vw, 110px) 0;
+      }
+      .head {
+        margin-bottom: 52px;
+      }
+
+      /* ---------- How it works ---------- */
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+      .step {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 32px 28px;
+        box-shadow: var(--shadow);
+        position: relative;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+      .step:hover {
+        transform: translateY(-6px);
+        box-shadow: var(--shadow-lg);
+      }
+      .step .num-badge {
+        position: absolute;
+        top: 24px;
+        right: 26px;
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: var(--primary-soft);
+        line-height: 1;
+      }
+      .step .step-ic {
+        width: 58px;
+        height: 58px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        font-size: 1.4rem;
+        color: #fff;
+        margin-bottom: 18px;
+        background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+      }
+      .step h3 {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .step p {
+        color: var(--muted);
+        font-size: 0.96rem;
+      }
+
+      /* ---------- Roles / benefits ---------- */
+      .roles-section {
+        background: linear-gradient(180deg, #fff, var(--cream));
+      }
+      .roles {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 22px;
+      }
+      .role {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 28px 24px;
+        box-shadow: var(--shadow);
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease,
+          border-color 0.2s ease;
+      }
+      .role:hover {
+        transform: translateY(-6px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--primary-bright);
+      }
+      .role .role-ic {
+        width: 54px;
+        height: 54px;
+        border-radius: 15px;
+        display: grid;
+        place-items: center;
+        font-size: 1.3rem;
+        color: #fff;
+        margin-bottom: 16px;
+      }
+      .role h3 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      .role ul {
+        list-style: none;
+        display: grid;
+        gap: 9px;
+      }
+      .role li {
+        display: flex;
+        gap: 9px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .role li i {
+        color: var(--success);
+        margin-top: 4px;
+        font-size: 0.8rem;
+      }
+
+      /* ---------- Features ---------- */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+      }
+      .feature {
+        display: flex;
+        gap: 16px;
+        padding: 24px;
+        border-radius: 16px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        transition: background 0.2s ease;
+      }
+      .feature:hover {
+        background: var(--primary-soft);
+      }
+      .feature .f-ic {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        font-size: 1.05rem;
+        flex: none;
+        background: var(--primary-soft);
+        color: var(--primary-deep);
+      }
+      .feature h4 {
+        font-size: 1.02rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .feature p {
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      /* ---------- Impact split ---------- */
+      .impact {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 50px;
+        align-items: center;
+      }
+      .impact-visual {
+        background: linear-gradient(135deg, var(--success), var(--success-deep));
+        border-radius: var(--radius);
+        padding: 48px 40px;
+        color: #fff;
+        box-shadow: var(--shadow-lg);
+      }
+      .impact-visual .big {
+        font-size: 3.2rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .impact-visual .big-sub {
+        opacity: 0.85;
+        margin-bottom: 26px;
+      }
+      .impact-bars {
+        display: grid;
+        gap: 16px;
+      }
+      .ibar {
+        display: grid;
+        gap: 6px;
+      }
+      .ibar .ibar-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+      }
+      .ibar .track {
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.22);
+        overflow: hidden;
+      }
+      .ibar .fill {
+        height: 100%;
+        border-radius: 999px;
+        background: #fff;
+      }
+      .check-list {
+        list-style: none;
+        display: grid;
+        gap: 16px;
+        margin-top: 26px;
+      }
+      .check-list li {
+        display: flex;
+        gap: 13px;
+        align-items: flex-start;
+      }
+      .check-list li .ci {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        background: var(--success-soft);
+        color: var(--success-deep);
+        flex: none;
+        font-size: 0.8rem;
+      }
+      .check-list li b {
+        display: block;
+        font-size: 1rem;
+      }
+      .check-list li span {
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      /* ---------- Final CTA ---------- */
+      .cta {
+        background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+        border-radius: 28px;
+        padding: clamp(44px, 6vw, 72px);
+        text-align: center;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow-lg);
+      }
+      .cta::before,
+      .cta::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .cta::before {
+        width: 320px;
+        height: 320px;
+        top: -120px;
+        right: -80px;
+      }
+      .cta::after {
+        width: 240px;
+        height: 240px;
+        bottom: -120px;
+        left: -60px;
+      }
+      .cta h2 {
+        font-size: clamp(1.9rem, 3.6vw, 2.8rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin-bottom: 14px;
+        position: relative;
+      }
+      .cta p {
+        opacity: 0.92;
+        max-width: 560px;
+        margin: 0 auto 30px;
+        position: relative;
+        font-size: 1.08rem;
+      }
+      .cta .hero-actions {
+        justify-content: center;
+        position: relative;
+      }
+
+      /* ---------- Footer ---------- */
+      footer {
+        padding: 60px 0 34px;
+      }
+      .foot-grid {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr 1fr 1fr;
+        gap: 34px;
+        padding-bottom: 34px;
+        border-bottom: 1px solid var(--line);
+      }
+      footer .brand {
+        margin-bottom: 14px;
+      }
+      .foot-about {
+        color: var(--muted);
+        font-size: 0.92rem;
+        max-width: 300px;
+      }
+      .foot-col h5 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--ink);
+        margin-bottom: 14px;
+      }
+      .foot-col a {
+        display: block;
+        color: var(--muted);
+        font-size: 0.92rem;
+        padding: 5px 0;
+        transition: color 0.15s ease;
+      }
+      .foot-col a:hover {
+        color: var(--primary-deep);
+      }
+      .foot-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 24px;
+        color: var(--muted);
+        font-size: 0.85rem;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .socials {
+        display: flex;
+        gap: 12px;
+      }
+      .socials a {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        transition: all 0.15s ease;
+      }
+      .socials a:hover {
+        background: var(--primary);
+        color: #fff;
+        border-color: var(--primary);
+      }
+
+      /* reveal-on-scroll */
+      .reveal {
+        opacity: 0;
+        transform: translateY(24px);
+        transition:
+          opacity 0.6s ease,
+          transform 0.6s ease;
+      }
+      .reveal.in {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* ---------- Responsive ---------- */
+      @media (max-width: 900px) {
+        .hero-grid,
+        .impact {
+          grid-template-columns: 1fr;
+        }
+        .hero-visual {
+          min-height: 340px;
+          order: -1;
+        }
+        .stats {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 26px 12px;
+        }
+        .stat + .stat::before {
+          display: none;
+        }
+        .steps,
+        .features {
+          grid-template-columns: 1fr;
+        }
+        .roles {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .foot-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .nav-links .link {
+          display: none;
+        }
+      }
+      @media (max-width: 560px) {
+        .roles {
+          grid-template-columns: 1fr;
+        }
+        .nav-cta .btn-ghost {
+          display: none;
+        }
+        .foot-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- ============ NAV ============ -->
+    <header>
+      <div class="wrap nav">
+        <a href="#top" class="brand">
+          <span class="brand-logo"><i class="fa-solid fa-leaf"></i></span>
+          FoodBridge
+        </a>
+        <nav class="nav-links">
+          <a class="link" href="#how">How it works</a>
+          <a class="link" href="#roles">Who it's for</a>
+          <a class="link" href="#features">Features</a>
+          <a class="link" href="#impact">Impact</a>
+        </nav>
+        <div class="nav-cta">
+          <a class="btn btn-ghost" href="/login"><i class="fa-solid fa-right-to-bracket"></i>Login</a>
+          <a class="btn btn-primary" href="/register">Get started</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ HERO ============ -->
+    <section class="hero" id="top">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow"><i class="fa-solid fa-seedling"></i> Zero food waste, zero hunger</span>
+          <h1>Rescue food.<br /><span class="accent">Restore hope.</span></h1>
+          <p class="lead">
+            FoodBridge connects restaurants, hotels and hosts with volunteers and NGOs — so surplus
+            meals reach people who need them, not landfills. Post surplus food in seconds and watch
+            it get rescued in real time.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/register">
+              <i class="fa-solid fa-user-plus"></i>Create free account
+            </a>
+            <a class="btn btn-ghost" href="/login">
+              <i class="fa-solid fa-right-to-bracket"></i>Sign in
+            </a>
+          </div>
+          <div class="hero-trust">
+            <div class="avatars">
+              <span style="background: #d87757">GP</span>
+              <span style="background: #1e9e5c">PS</span>
+              <span style="background: #ff7a3d">HK</span>
+              <span style="background: #2258c7">+</span>
+            </div>
+            <div>Trusted by <b>156 volunteers</b> &amp; <b>38 partner NGOs</b></div>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="orb"><i class="fa-solid fa-bowl-food"></i></div>
+          <div class="float-card fc-1">
+            <span class="fc-ic" style="background: var(--success)"><i class="fa-solid fa-circle-check"></i></span>
+            <div>
+              <div class="fc-title">Listing posted</div>
+              <div class="fc-sub">Nearby volunteers notified</div>
+            </div>
+          </div>
+          <div class="float-card fc-2">
+            <span class="fc-ic" style="background: var(--primary)"><i class="fa-solid fa-truck-fast"></i></span>
+            <div>
+              <div class="fc-title">Volunteer en route</div>
+              <div class="fc-sub">~12 min away</div>
+            </div>
+          </div>
+          <div class="float-card fc-3">
+            <span class="fc-ic" style="background: var(--orange)"><i class="fa-solid fa-award"></i></span>
+            <div>
+              <div class="fc-title">CSR certificate</div>
+              <div class="fc-sub">Auto-issued to donor</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STATS ============ -->
+    <div class="wrap">
+      <div class="stats reveal">
+        <div class="stat">
+          <div class="num">8,420<span class="plus">+</span></div>
+          <div class="lbl">Meals rescued</div>
+        </div>
+        <div class="stat">
+          <div class="num">156</div>
+          <div class="lbl">Active volunteers</div>
+        </div>
+        <div class="stat">
+          <div class="num">38</div>
+          <div class="lbl">Partner NGOs</div>
+        </div>
+        <div class="stat">
+          <div class="num">2.1<span class="plus">t</span></div>
+          <div class="lbl">CO₂ saved</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ HOW IT WORKS ============ -->
+    <section class="block" id="how">
+      <div class="wrap">
+        <div class="head center reveal">
+          <span class="eyebrow"><i class="fa-solid fa-route"></i> Simple by design</span>
+          <h2 class="section-title">Three steps from surplus to smiles</h2>
+          <p class="section-sub">
+            No cold calls, no spreadsheets. FoodBridge handles matching, routing and proof — you
+            just show up for the food.
+          </p>
+        </div>
+        <div class="steps">
+          <div class="step reveal">
+            <span class="num-badge">01</span>
+            <div class="step-ic"><i class="fa-solid fa-utensils"></i></div>
+            <h3>Post surplus food</h3>
+            <p>
+              Donors list quantity, freshness and a pickup window in seconds. Add a photo and pin
+              the exact pickup location on the map.
+            </p>
+          </div>
+          <div class="step reveal">
+            <span class="num-badge">02</span>
+            <div class="step-ic"><i class="fa-solid fa-truck-fast"></i></div>
+            <h3>Volunteers pick up</h3>
+            <p>
+              Nearby volunteers are notified instantly, claim the listing and get turn-by-turn
+              routing to the donor and drop-off point.
+            </p>
+          </div>
+          <div class="step reveal">
+            <span class="num-badge">03</span>
+            <div class="step-ic"><i class="fa-solid fa-hand-holding-heart"></i></div>
+            <h3>Track every rescue</h3>
+            <p>
+              Recipients confirm delivery end-to-end, and donors receive a CSR-ready donation
+              certificate — full transparency, every time.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ROLES / BENEFITS ============ -->
+    <section class="block roles-section" id="roles">
+      <div class="wrap">
+        <div class="head center reveal">
+          <span class="eyebrow"><i class="fa-solid fa-users"></i> Built for everyone</span>
+          <h2 class="section-title">One platform, four roles</h2>
+          <p class="section-sub">
+            Whether you have food to give, time to drive, or mouths to feed — there's a place for
+            you on FoodBridge.
+          </p>
+        </div>
+        <div class="roles">
+          <div class="role reveal">
+            <div class="role-ic" style="background: linear-gradient(135deg, #d87757, #b65c3f)">
+              <i class="fa-solid fa-utensils"></i>
+            </div>
+            <h3>Donors</h3>
+            <ul>
+              <li><i class="fa-solid fa-check"></i>Post surplus in under 30 seconds</li>
+              <li><i class="fa-solid fa-check"></i>Zero disposal cost &amp; waste</li>
+              <li><i class="fa-solid fa-check"></i>Auto CSR donation certificates</li>
+              <li><i class="fa-solid fa-check"></i>Exportable impact reports</li>
+            </ul>
+          </div>
+          <div class="role reveal">
+            <div class="role-ic" style="background: linear-gradient(135deg, #1e9e5c, #146c43)">
+              <i class="fa-solid fa-truck-fast"></i>
+            </div>
+            <h3>Volunteers</h3>
+            <ul>
+              <li><i class="fa-solid fa-check"></i>See rescues sorted by distance</li>
+              <li><i class="fa-solid fa-check"></i>One-tap claim &amp; navigation</li>
+              <li><i class="fa-solid fa-check"></i>Go online/offline anytime</li>
+              <li><i class="fa-solid fa-check"></i>Climb the impact leaderboard</li>
+            </ul>
+          </div>
+          <div class="role reveal">
+            <div class="role-ic" style="background: linear-gradient(135deg, #ff7a3d, #e8621f)">
+              <i class="fa-solid fa-hand-holding-heart"></i>
+            </div>
+            <h3>Recipients</h3>
+            <ul>
+              <li><i class="fa-solid fa-check"></i>Get matched to nearby surplus</li>
+              <li><i class="fa-solid fa-check"></i>Accept &amp; track incoming food</li>
+              <li><i class="fa-solid fa-check"></i>Confirm delivery in a tap</li>
+              <li><i class="fa-solid fa-check"></i>Reliable, verified donors</li>
+            </ul>
+          </div>
+          <div class="role reveal">
+            <div class="role-ic" style="background: linear-gradient(135deg, #2258c7, #16389a)">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h3>Admins</h3>
+            <ul>
+              <li><i class="fa-solid fa-check"></i>Verify donors &amp; NGOs</li>
+              <li><i class="fa-solid fa-check"></i>Resolve disputes fairly</li>
+              <li><i class="fa-solid fa-check"></i>Platform-wide CSR reporting</li>
+              <li><i class="fa-solid fa-check"></i>Keep the community safe</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section class="block" id="features">
+      <div class="wrap">
+        <div class="head center reveal">
+          <span class="eyebrow"><i class="fa-solid fa-bolt"></i> Everything included</span>
+          <h2 class="section-title">Features that make rescue effortless</h2>
+          <p class="section-sub">
+            A complete toolkit for food redistribution — from the first listing to the final
+            certificate.
+          </p>
+        </div>
+        <div class="features">
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-location-crosshairs"></i></div>
+            <div>
+              <h4>Real-time matching</h4>
+              <p>Surplus is instantly matched to the nearest available volunteers and NGOs.</p>
+            </div>
+          </div>
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-map-location-dot"></i></div>
+            <div>
+              <h4>Live route tracking</h4>
+              <p>Interactive maps with pickup, drop-off and ETA for every delivery.</p>
+            </div>
+          </div>
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-award"></i></div>
+            <div>
+              <h4>CSR certificates</h4>
+              <p>Donors get audit-ready certificates and donation reports automatically.</p>
+            </div>
+          </div>
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-user-check"></i></div>
+            <div>
+              <h4>Verified community</h4>
+              <p>Admins verify every donor and NGO so food changes hands with trust.</p>
+            </div>
+          </div>
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-bell"></i></div>
+            <div>
+              <h4>Instant notifications</h4>
+              <p>Everyone stays in the loop the moment a listing is posted or claimed.</p>
+            </div>
+          </div>
+          <div class="feature reveal">
+            <div class="f-ic"><i class="fa-solid fa-chart-line"></i></div>
+            <div>
+              <h4>Impact analytics</h4>
+              <p>Track meals rescued, CO₂ saved and community reach on your dashboard.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ IMPACT ============ -->
+    <section class="block" id="impact">
+      <div class="wrap impact">
+        <div class="impact-visual reveal">
+          <div class="big">8,420+</div>
+          <div class="big-sub">meals rescued and counting</div>
+          <div class="impact-bars">
+            <div class="ibar">
+              <div class="ibar-row"><span>Meals redistributed</span><span>92%</span></div>
+              <div class="track"><div class="fill" style="width: 92%"></div></div>
+            </div>
+            <div class="ibar">
+              <div class="ibar-row"><span>On-time pickups</span><span>87%</span></div>
+              <div class="track"><div class="fill" style="width: 87%"></div></div>
+            </div>
+            <div class="ibar">
+              <div class="ibar-row"><span>Donor satisfaction</span><span>96%</span></div>
+              <div class="track"><div class="fill" style="width: 96%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="reveal">
+          <span class="eyebrow"><i class="fa-solid fa-earth-asia"></i> Why FoodBridge</span>
+          <h2 class="section-title">Turn what would be wasted into what matters</h2>
+          <p class="section-sub">
+            A third of all food produced is wasted while millions go hungry. FoodBridge closes that
+            gap — locally, transparently and at the speed of a tap.
+          </p>
+          <ul class="check-list">
+            <li>
+              <span class="ci"><i class="fa-solid fa-leaf"></i></span>
+              <div><b>Cut waste at the source</b><span>Divert edible surplus from landfills in minutes.</span></div>
+            </li>
+            <li>
+              <span class="ci"><i class="fa-solid fa-heart"></i></span>
+              <div><b>Feed your community</b><span>Every rescue reaches real people nearby, fast.</span></div>
+            </li>
+            <li>
+              <span class="ci"><i class="fa-solid fa-file-shield"></i></span>
+              <div><b>Prove your impact</b><span>Certificates and reports for CSR and compliance.</span></div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FINAL CTA ============ -->
+    <section class="block" style="padding-top: 0">
+      <div class="wrap">
+        <div class="cta reveal">
+          <h2>Ready to rescue your first meal?</h2>
+          <p>
+            Join FoodBridge free today. Create an account in under a minute and start turning
+            surplus into hope — no cost, no waste, no barriers.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-white" href="/register">
+              <i class="fa-solid fa-user-plus"></i>Create free account
+            </a>
+            <a class="btn btn-light" href="/login">
+              <i class="fa-solid fa-right-to-bracket"></i>I already have an account
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FOOTER ============ -->
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div>
+            <div class="brand">
+              <span class="brand-logo"><i class="fa-solid fa-leaf"></i></span>
+              FoodBridge
+            </div>
+            <p class="foot-about">
+              A coordination platform that connects surplus food with the people who need it —
+              rescuing meals, reducing waste and restoring hope, one pickup at a time.
+            </p>
+          </div>
+          <div class="foot-col">
+            <h5>Product</h5>
+            <a href="#how">How it works</a>
+            <a href="#roles">Who it's for</a>
+            <a href="#features">Features</a>
+            <a href="#impact">Impact</a>
+          </div>
+          <div class="foot-col">
+            <h5>Get started</h5>
+            <a href="/register">Create account</a>
+            <a href="/login">Login</a>
+            <a href="/register">For donors</a>
+            <a href="/register">For volunteers</a>
+          </div>
+          <div class="foot-col">
+            <h5>Company</h5>
+            <a href="#">About us</a>
+            <a href="#">Contact</a>
+            <a href="#">Privacy</a>
+            <a href="#">Terms</a>
+          </div>
+        </div>
+        <div class="foot-bottom">
+          <div>© 2026 FoodBridge. A coordination platform, not a food supplier.</div>
+          <div class="socials">
+            <a href="#" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
+            <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+            <a href="#" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
+            <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Reveal-on-scroll
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add('in');
+              io.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.12 },
+      );
+      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+    </script>
+  </body>
+</html>

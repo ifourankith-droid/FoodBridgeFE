@@ -1,0 +1,34 @@
+<div class="lc-body">
+  <div class="lc-head">
+    <div class="lc-title-wrap">
+      <div class="lc-icon" [style.background]="iconBg()"><i [class]="icon()"></i></div>
+      <div class="lc-title">
+        <div class="font-semibold truncate">{{ listing().title }}</div>
+        <div class="text-muted text-xs truncate">{{ listing().foodType }}</div>
+      </div>
+    </div>
+    <app-status-badge [status]="status()" />
+  </div>
+
+  <div class="lc-chips">
+    <app-pill type="quantity" [value]="listing().quantityMeals" />
+    <app-pill type="diet" [value]="listing().dietType" />
+    <app-pill type="meal" [value]="listing().mealType" />
+    <app-pill type="freshness" [value]="listing().freshnessTag" />
+  </div>
+
+  @if (hasMeta()) {
+    <div class="lc-meta"><ng-content select="[cardMeta]" /></div>
+  }
+
+  @if (deadline()) {
+    <app-deadline-meter
+      [deadline]="listing().pickupDeadlineUtc"
+      [createdAt]="listing().createdAtUtc ?? null"
+    />
+  }
+</div>
+
+@if (hasFooter()) {
+  <div class="lc-footer"><ng-content select="[cardFooter]" /></div>
+}

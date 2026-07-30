@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  background: var(--fb-surface);
+  border: 1px solid var(--fb-line);
+  border-radius: var(--fb-radius);
+  box-shadow: var(--fb-shadow);
+  overflow: hidden;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+:host:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fb-shadow-lg);
+}
+
+:host.clickable {
+  cursor: pointer;
+}
+
+.lc-body {
+  padding: 16px;
+}
+
+.lc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.lc-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lc-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.lc-title {
+  min-width: 0;
+}
+
+.lc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.lc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--fb-muted);
+}
+
+.lc-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--fb-line);
+}

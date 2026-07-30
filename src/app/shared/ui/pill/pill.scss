@@ -1,0 +1,22 @@
+:host {
+  display: inline-flex;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--fb-bg);
+  color: var(--fb-ink);
+  border: 1px solid var(--fb-line);
+  white-space: nowrap;
+}
+
+.pill i {
+  font-size: 0.9em;
+  color: var(--fb-primary);
+}

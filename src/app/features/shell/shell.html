@@ -1,0 +1,13 @@
+<div class="fb-shell">
+  <app-sidebar />
+  <div class="fb-main" [class.collapsed]="layout.collapsed()">
+    <app-topbar />
+    <div class="fb-page-body">
+      <router-outlet />
+    </div>
+  </div>
+</div>
+
+@if (layout.sidebarOpen()) {
+  <div class="fb-backdrop" (click)="layout.closeSidebar()"></div>
+}

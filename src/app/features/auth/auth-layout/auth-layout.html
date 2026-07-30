@@ -1,0 +1,65 @@
+<div class="auth-shell">
+  <!-- Left: brand / marketing -->
+  <aside class="auth-brand">
+    <div class="auth-brand-content">
+      <div class="auth-brand-top">
+        <app-logo [size]="46" [showWordmark]="true" textClass="auth-brand-name" />
+      </div>
+
+      <div>
+        <h2 class="auth-brand-title">Rescue food.<br />Restore hope.</h2>
+        <p class="auth-brand-desc">
+          FoodBridge connects restaurants, hotels and hosts with volunteers and NGOs — so surplus
+          meals reach people who need them, not landfills.
+        </p>
+
+        <ul class="auth-brand-features">
+          <li>
+            <span class="feat-ic"><i class="fa-solid fa-circle-plus"></i></span>
+            Post surplus food in seconds
+          </li>
+          <li>
+            <span class="feat-ic"><i class="fa-solid fa-truck-fast"></i></span>
+            Volunteers pick up &amp; deliver nearby
+          </li>
+          <li>
+            <span class="feat-ic"><i class="fa-solid fa-route"></i></span>
+            Track every rescue end-to-end
+          </li>
+          <li>
+            <span class="feat-ic"><i class="fa-solid fa-award"></i></span>
+            Earn CSR-ready donation certificates
+          </li>
+        </ul>
+      </div>
+
+      <div class="auth-brand-stats">
+        <div>
+          <div class="num">8,420</div>
+          <div class="lbl">Meals rescued</div>
+        </div>
+        <div class="sep"></div>
+        <div>
+          <div class="num">156</div>
+          <div class="lbl">Volunteers</div>
+        </div>
+        <div class="sep"></div>
+        <div>
+          <div class="num">38</div>
+          <div class="lbl">Partner NGOs</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right: form -->
+  <main class="auth-form-panel">
+    <div class="auth-form-scroll">
+      <div class="auth-mobile-brand">
+        <app-logo [size]="40" />
+        <span>FoodBridge</span>
+      </div>
+      <router-outlet />
+    </div>
+  </main>
+</div>

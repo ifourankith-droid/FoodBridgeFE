@@ -1,0 +1,111 @@
+<div class="topbar">
+  <div class="flex items-center gap-2">
+    <div>
+      <button
+        type="button"
+        class="btn-icon"
+        title="Toggle sidebar"
+        aria-label="Toggle sidebar"
+        (click)="layout.toggleSidebar()"
+      >
+        <i class="fa-solid fa-bars"></i>
+      </button>
+    </div>
+    <div class="search-box hidden lg:block">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" placeholder="Search listings, NGOs, volunteers..." />
+    </div>
+
+    <!-- Pickup address selector (donors) -->
+    @if (isDonor()) {
+      <div class="relative">
+        <button type="button" class="addr-btn" (click)="toggleAddr()" title="Pickup address">
+          <i class="fa-solid fa-location-dot text-primary"></i>
+          <span class="truncate max-w-[120px] sm:max-w-[180px]">{{
+            pickup.selected()?.label || 'Set pickup address'
+          }}</span>
+          <i class="fa-solid fa-chevron-down text-[10px] text-muted"></i>
+        </button>
+        @if (addrOpen()) {
+          <div class="dropdown-panel left-0 w-[300px]">
+            <div class="px-2 py-1 small-label">Pickup address</div>
+            @for (a of pickup.addresses(); track a.id) {
+              <div
+                class="addr-item"
+                [class.sel]="a.id === pickup.selected()?.id"
+                (click)="selectAddr(a.id)"
+              >
+                <i
+                  class="fa-solid mr-2"
+                  [class]="
+                    a.id === pickup.selected()?.id
+                      ? 'fa-circle-check text-primary'
+                      : 'fa-location-dot text-muted'
+                  "
+                ></i>
+                <span class="flex-1 text-sm truncate">{{ a.label }}</span>
+              </div>
+            } @empty {
+              <div class="text-muted text-sm px-2 py-1">No saved addresses yet</div>
+            }
+            <hr class="my-1.5 border-line" />
+            <!-- A real href, so the new tab is the browser's own navigation and
+                 middle-click / ctrl-click behave the same as a plain click. -->
+            <a
+              class="addr-add"
+              [routerLink]="profileLink"
+              target="_blank"
+              rel="noopener"
+              (click)="closeMenus()"
+            >
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>Add new address
+              <i class="fa-solid fa-up-right-from-square ext" aria-hidden="true"></i>
+              <span class="sr-only">(opens in a new tab)</span>
+            </a>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="flex items-center gap-4">
+    @if (availability.appliesToCurrentUser()) {
+      <app-availability-toggle />
+    }
+
+    <!-- Notifications -->
+    <app-notification-bell [open]="notifOpen()" (openChange)="onNotifOpenChange($event)" />
+
+    <!-- Profile -->
+    <div class="relative">
+      <button type="button" class="avatar-btn" (click)="toggleMenu()">
+        <app-avatar [name]="userName()" [imageUrl]="avatarUrl()" [size]="40" />
+      </button>
+      @if (menuOpen()) {
+        <div class="dropdown-panel w-[220px]">
+          <div class="px-3 pt-2 pb-2.5 border-b border-line mb-1">
+            <div class="font-semibold text-sm truncate">{{ userName() }}</div>
+            <app-role-badge class="mt-1.5" [role]="role()" size="sm" />
+          </div>
+          <a class="dropdown-item" (click)="go('profile')"
+            ><i class="fa-solid fa-user"></i>Profile</a
+          >
+          <a class="dropdown-item" (click)="go('settings')"
+            ><i class="fa-solid fa-gear"></i>Settings</a
+          >
+          <a class="dropdown-item" (click)="helpSoon()">
+            <i class="fa-solid fa-circle-question"></i>Help
+          </a>
+          <hr class="my-1 border-line" />
+          <a class="dropdown-item !text-red-600" (click)="logout()">
+            <i class="fa-solid fa-right-from-bracket"></i>Logout
+          </a>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (notifOpen() || menuOpen() || addrOpen()) {
+    <div class="menu-backdrop" (click)="closeMenus()"></div>
+  }
+</div>

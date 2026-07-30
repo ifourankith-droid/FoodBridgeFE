@@ -1,0 +1,36 @@
+<div class="mx-auto w-full max-w-[520px]">
+  <span class="auth-eyebrow">Welcome back</span>
+  <h1 class="auth-title">Sign in to FoodBridge</h1>
+  <p class="auth-subtitle">
+    Enter your mobile number and we'll send you a one-time code to continue.
+  </p>
+
+  <form [formGroup]="form" (ngSubmit)="sendOtp()">
+    <app-input
+      type="tel"
+      label="Mobile number"
+      prefix="+91"
+      prefixIcon="fa-solid fa-phone"
+      inputmode="numeric"
+      autocomplete="tel-national"
+      [maxlength]="10"
+      placeholder="98765 43210"
+      hint="We'll text a 6-digit verification code. Standard rates may apply."
+      [error]="mobileError()"
+      formControlName="mobile"
+    />
+
+    <div class="mt-5">
+      <app-button type="submit" icon="fa-solid fa-paper-plane" [block]="true">Send OTP</app-button>
+    </div>
+  </form>
+
+  <p class="text-right text-sm text-muted mt-4">
+    Don't have an account?
+    <button type="button" class="fb-link ml-1" (click)="goToRegister()">Create account</button>
+  </p>
+
+  <p class="auth-fineprint">
+    By continuing, you agree FoodBridge is a coordination platform, not a food supplier.
+  </p>
+</div>

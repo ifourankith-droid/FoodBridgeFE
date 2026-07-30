@@ -1,0 +1,256 @@
+<app-page-wrapper [title]="greeting()" [description]="subtitle()">
+  <!-- Stat tiles -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    @if (loading()) {
+      @for (s of skeletons; track $index) {
+        <div class="card-fb stat-card">
+          <div class="skeleton !rounded-full w-11 h-11 mb-2"></div>
+          <div class="skeleton h-6 w-14 mb-1.5"></div>
+          <div class="skeleton h-3 w-20"></div>
+        </div>
+      }
+    } @else {
+      @for (stat of stats(); track stat.label) {
+        <div class="card-fb stat-card">
+          <div class="stat-icon" [style.background]="stat.color"><i [class]="stat.icon"></i></div>
+          <div class="stat-value">{{ stat.value }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Monthly chart, full width for donor only. Volunteer & recipient show it half-width beside another card. -->
+  @if (!loading() && role() === 'donor' && monthly().length) {
+    <div class="card-fb p-4 mb-6">
+      <h6 class="section-title !mb-3">{{ chartTitle() }}</h6>
+      <app-bar-chart [data]="monthly()" />
+    </div>
+  }
+
+  @if (!loading()) {
+    @switch (role()) {
+      @case ('donor') {
+        @if (donor(); as d) {
+          <div class="flex items-center justify-between mb-3">
+            <h6 class="section-title mb-0">Recent Activity</h6>
+            <a [routerLink]="['/app', 'listings']" class="fb-link text-sm">View all</a>
+          </div>
+          @if (d.recentActivity.length) {
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 mb-3">
+              @for (l of d.recentActivity.slice(0, 4); track l.id) {
+                <app-listing-card [listing]="l" [deadline]="true" />
+              }
+            </div>
+          } @else {
+            <div class="card-fb p-3 mb-6">
+              <app-empty-state icon="fa-solid fa-inbox" text="No recent activity yet" />
+            </div>
+          }
+
+          <h6 class="section-title">Recipients Near You</h6>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            @for (r of d.nearbyRecipients; track r.id) {
+              <div
+                class="card-fb p-3 flex items-center gap-3 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                <app-avatar [name]="r.name" [size]="46" />
+                <div class="min-w-0 flex-1">
+                  <div class="font-semibold text-sm truncate">{{ r.name }}</div>
+                  <div class="text-muted text-xs truncate mb-1.5">
+                    <i class="fa-solid fa-location-dot mr-1"></i
+                    >{{ r.city || r.address || 'Location set' }}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="badge-fb bg-primary-soft text-primary-deep"
+                      ><i class="fa-solid fa-route mr-1"></i
+                      >{{ r.distanceKm | number: '1.0-1' }} km</span
+                    >
+                    @if (r.capacityMeals) {
+                      <span class="badge-fb bg-line text-muted"
+                        ><i class="fa-solid fa-bowl-food mr-1"></i>{{ r.capacityMeals }}/day</span
+                      >
+                    }
+                  </div>
+                </div>
+              </div>
+            } @empty {
+              <div class="sm:col-span-2 lg:col-span-3">
+                <!-- bordered: this sits straight in the grid with no card around
+                     it, so the dashed edge gives the empty region a shape. -->
+                <app-empty-state
+                  [bordered]="true"
+                  icon="fa-solid fa-people-group"
+                  title="No recipients nearby"
+                  text="Verified NGOs and shelters show up here once they are within your pickup radius."
+                />
+              </div>
+            }
+          </div>
+        }
+      }
+
+      @case ('volunteer') {
+        @if (volunteer(); as d) {
+          <!-- Deliveries chart (half) + Badges (half), equal height -->
+          <div class="grid gap-4 lg:grid-cols-2 mb-6">
+            @if (monthly().length) {
+              <div class="card-fb p-4">
+                <h6 class="section-title !mb-3">Deliveries by month</h6>
+                <app-bar-chart [data]="monthly()" />
+              </div>
+            }
+            @if (d.badges.length) {
+              <div class="card-fb p-4">
+                <h6 class="section-title !mb-3">Badges</h6>
+                <div class="space-y-2.5">
+                  @for (b of d.badges; track b.code) {
+                    <div class="info-row" [class.active]="b.earned">
+                      <span class="row-medal" [class.active]="b.earned">
+                        <i
+                          class="fa-solid"
+                          [class.fa-medal]="b.earned"
+                          [class.fa-lock]="!b.earned"
+                        ></i>
+                      </span>
+                      <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-sm truncate">{{ b.name }}</div>
+                        <div
+                          class="text-xs"
+                          [class.text-primary-deep]="b.earned"
+                          [class.text-muted]="!b.earned"
+                        >
+                          {{ b.earned ? 'Earned' : 'Locked' }}
+                        </div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="flex items-center justify-between mb-3">
+            <h6 class="section-title mb-0">Open Listings Near You</h6>
+            <a [routerLink]="['/app', 'nearby']" class="fb-link text-sm">View all</a>
+          </div>
+          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            @for (l of openCards(); track l.id) {
+              <app-listing-card [listing]="l" [deadline]="false" [hasFooter]="true">
+                <div cardFooter class="text-xs text-muted space-y-1">
+                  <div class="truncate">
+                    <i class="fa-solid fa-location-dot mr-1"></i>{{ l.pickupAddress }}
+                  </div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="truncate"
+                      ><i class="fa-regular fa-clock mr-1"></i>Pickup by
+                      {{ l.pickupDeadlineUtc | date: 'MMM d, h:mm a' }}</span
+                    >
+                    <span class="badge-fb bg-primary-soft text-primary-deep shrink-0"
+                      >{{ l.distanceKm | number: '1.0-1' }} km</span
+                    >
+                  </div>
+                </div>
+              </app-listing-card>
+            } @empty {
+              <div class="md:col-span-2 lg:col-span-3">
+                <app-empty-state icon="fa-solid fa-map" text="No open listings right now" />
+              </div>
+            }
+          </div>
+        }
+      }
+
+      @case ('recipient') {
+        @if (recipient(); as d) {
+          <!-- Incoming Food — hidden entirely when there's nothing incoming -->
+          @if (d.incomingFood.length) {
+            <div class="flex items-center justify-between mb-3">
+              <h6 class="section-title mb-0">Incoming Food</h6>
+              <a [routerLink]="['/app', 'incoming']" class="fb-link text-sm">View all</a>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2 mb-6">
+              @for (l of d.incomingFood.slice(0, 4); track l.id) {
+                <app-listing-card [listing]="l" [deadline]="true" />
+              }
+            </div>
+          }
+
+          <!-- Chart (half) + Top Donors (half), equal height -->
+          <div class="grid gap-4 lg:grid-cols-2">
+            @if (monthly().length) {
+              <div class="card-fb p-4">
+                <h6 class="section-title !mb-3">Meals received by month</h6>
+                <app-bar-chart [data]="monthly()" />
+              </div>
+            }
+            @if (d.donorDistribution.length) {
+              <div class="card-fb p-4">
+                <h6 class="section-title !mb-3">Top Donors</h6>
+                <div class="space-y-2.5">
+                  @for (donor of d.donorDistribution; track donor.donorId; let i = $index) {
+                    <div class="info-row" [class.active]="i === 0">
+                      <app-avatar [name]="donor.donorName" [size]="38" />
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                          <div class="font-semibold text-sm truncate">{{ donor.donorName }}</div>
+                          <span class="badge-fb bg-primary-soft text-primary-deep shrink-0"
+                            >{{ donor.totalMealsReceived }} meals</span
+                          >
+                        </div>
+                        <div class="h-1.5 rounded-full bg-line overflow-hidden">
+                          <div
+                            class="h-full rounded-full bg-primary transition-all"
+                            [style.width.%]="sharePct(donor.totalMealsReceived, d.totalMealsReceived)"
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+
+      @default {
+        @if (adminData(); as d) {
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="card-fb p-4">
+              <h6 class="section-title !mb-3">Listings by Status</h6>
+              @for (s of d.listingsByStatus; track s.status) {
+                <div class="flex items-center gap-2 py-1.5">
+                  <app-status-badge [status]="badgeStatus(s.status)" />
+                  <div class="flex-1 h-2 rounded-full bg-line overflow-hidden">
+                    <div
+                      class="h-full bg-primary"
+                      [style.width.%]="d.totalListings ? (s.count / d.totalListings) * 100 : 0"
+                    ></div>
+                  </div>
+                  <span class="text-sm font-semibold w-8 text-right">{{ s.count }}</span>
+                </div>
+              } @empty {
+                <app-empty-state icon="fa-solid fa-list" text="No listings yet" />
+              }
+            </div>
+
+            <div class="card-fb p-4">
+              <h6 class="section-title !mb-3">Accounts by Status</h6>
+              @for (s of d.accountsByStatus; track s.status) {
+                <div
+                  class="flex items-center justify-between py-2 border-b border-line last:border-0"
+                >
+                  <span class="text-sm font-semibold capitalize">{{ s.status }}</span>
+                  <span class="badge-fb bg-primary-soft text-primary-deep">{{ s.count }}</span>
+                </div>
+              } @empty {
+                <app-empty-state icon="fa-solid fa-users" text="No accounts yet" />
+              }
+            </div>
+          </div>
+        }
+      }
+    }
+  }
+</app-page-wrapper>

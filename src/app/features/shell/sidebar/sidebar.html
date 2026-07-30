@@ -1,0 +1,64 @@
+<!-- `on-dark` marks this as a permanently dark surface (in both themes) so
+     descendants like app-role-badge can flip their foreground accordingly. -->
+<aside
+  class="sidebar on-dark"
+  [class.show]="layout.sidebarOpen()"
+  [class.collapsed]="layout.collapsed()"
+>
+  <div class="brand flex items-center gap-2.5 px-2.5 pt-1.5 pb-5">
+    <app-logo [size]="38" />
+    <div class="brand-text">
+      <div class="font-bold text-[15px] leading-none mb-1.5">FoodBridge</div>
+      <!-- <app-role-badge [role]="role()" size="sm" /> -->
+    </div>
+  </div>
+
+  <nav class="nav-scroll">
+    <ul class="nav-fb list-none p-0 m-0">
+      @for (item of navItems(); track item.id) {
+        <li>
+          <a
+            [routerLink]="[routes.app, item.id]"
+            routerLinkActive="active"
+            [title]="item.title"
+            (click)="onNavigate()"
+          >
+            <i [class]="item.icon"></i> <span class="nav-label">{{ item.title }}</span>
+          </a>
+        </li>
+      }
+    </ul>
+  </nav>
+
+  <div class="side-user">
+    @if (userMenuOpen()) {
+      <div class="popover-backdrop" (click)="toggleUserMenu()"></div>
+      <div class="user-popover">
+        <a class="popover-item" (click)="goto('profile')">
+          <i class="fa-solid fa-user"></i>Profile
+        </a>
+        <a class="popover-item" (click)="goto('settings')">
+          <i class="fa-solid fa-gear"></i>Settings
+        </a>
+        <hr class="my-1 border-line" />
+        <a class="popover-item !text-red-600" (click)="logout()">
+          <i class="fa-solid fa-right-from-bracket"></i>Logout
+        </a>
+      </div>
+    }
+    <button
+      type="button"
+      class="side-user-btn"
+      [class.is-open]="userMenuOpen()"
+      [title]="userName()"
+      (click)="toggleUserMenu()"
+    >
+      <app-avatar [name]="userName()" [imageUrl]="avatarUrl()" [size]="40" />
+      <span class="side-user-info">
+        <span class="side-user-name block">{{ userName() }}</span>
+        <app-role-badge class="mt-1" [role]="role()" size="sm" />
+      </span>
+      <i class="side-user-chev fa-solid fa-chevron-up"></i>
+    </button>
+  </div>
+</aside>

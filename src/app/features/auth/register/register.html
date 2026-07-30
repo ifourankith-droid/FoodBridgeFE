@@ -1,0 +1,237 @@
+<div class="mx-auto w-full max-w-[520px]">
+  <span class="auth-eyebrow">Get started</span>
+  <h1 class="auth-title">Create your account</h1>
+  <p class="auth-subtitle">Just a few details to set up your FoodBridge account.</p>
+
+  <!-- Step indicator (click a completed step to go back) -->
+  <div class="flex justify-center items-center gap-2.5 mb-8">
+    @for (n of [1, 2, 3, 4]; track n) {
+      @if (n > 1) {
+        <div class="step-line"></div>
+      }
+      <div
+        class="step-dot"
+        [class.active]="step() === n"
+        [class.done]="step() > n"
+        [class.cursor-pointer]="step() > n"
+        [attr.role]="step() > n ? 'button' : null"
+        [attr.title]="step() > n ? 'Go back to step ' + n : null"
+        (click)="stepBack(n)"
+      >
+        {{ n }}
+      </div>
+    }
+  </div>
+
+  @switch (step()) {
+    <!-- Step 1: Role -->
+    @case (1) {
+      <p class="small-label mb-3">Step 1 — Choose your role</p>
+      <div class="grid grid-cols-3 gap-3">
+        @for (option of roleOptions; track option.value) {
+          <div
+            class="role-card"
+            [class.selected]="role() === option.value"
+            (click)="selectRole(option.value)"
+          >
+            <i [class]="option.icon"></i>
+            <div class="font-semibold text-sm">{{ option.label }}</div>
+          </div>
+        }
+      </div>
+      <div class="mt-6">
+        <app-button
+          icon="fa-solid fa-arrow-right"
+          iconPosition="right"
+          [block]="true"
+          (clicked)="goToStep(2)"
+        >
+          Continue
+        </app-button>
+      </div>
+      <p class="text-right text-sm text-muted mt-4">
+        Already have an account?
+        <button type="button" class="fb-link ml-1" (click)="goToLogin()">Sign in</button>
+      </p>
+    }
+
+    <!-- Step 2: Personal info -->
+    @case (2) {
+      <p class="small-label mb-3">Step 2 — Personal information</p>
+      <form [formGroup]="form" class="grid grid-cols-12 gap-3">
+        <app-input
+          class="col-span-12"
+          formControlName="name"
+          placeholder="Full name / Organization name"
+          [required]="true"
+          hint="Your full name, or your organization's name."
+          [error]="err('name')"
+        />
+        <app-input class="col-span-12" formControlName="address" placeholder="Address" />
+        <app-input class="col-span-6" formControlName="city" placeholder="City" />
+        <app-input class="col-span-3" formControlName="state" placeholder="State" />
+        <app-input
+          class="col-span-3"
+          type="tel"
+          [maxlength]="6"
+          inputmode="numeric"
+          formControlName="pincode"
+          placeholder="Pincode"
+        />
+
+        @if (isRecipient()) {
+          <div class="col-span-12">
+            <label class="small-label mb-2 block">You are registering as</label>
+            <div class="flex gap-2 mb-2">
+              <button
+                type="button"
+                class="btn-fb-outline flex-1"
+                [class.selected]="recipientType() === 'Individual'"
+                (click)="setRecipientType('Individual')"
+              >
+                👤 Individual / Household
+              </button>
+              <button
+                type="button"
+                class="btn-fb-outline flex-1"
+                [class.selected]="recipientType() === 'Organization'"
+                (click)="setRecipientType('Organization')"
+              >
+                🏢 Organization / NGO
+              </button>
+            </div>
+            <app-input
+              formControlName="capacity"
+              [placeholder]="capacityPlaceholder()"
+              [required]="true"
+              hint="Helps us match the right amount of food to you."
+              [error]="err('capacity')"
+            />
+          </div>
+        }
+      </form>
+      <div class="flex gap-2 mt-6">
+        <div class="flex-1">
+          <app-button variant="outline" [block]="true" (clicked)="goToStep(1)">Back</app-button>
+        </div>
+        <div class="flex-1">
+          <app-button
+            icon="fa-solid fa-arrow-right"
+            iconPosition="right"
+            [block]="true"
+            (clicked)="goToStep(3)"
+          >
+            Continue
+          </app-button>
+        </div>
+      </div>
+    }
+
+    <!-- Step 3: Location -->
+    @case (3) {
+      <p class="small-label mb-3">Step 3 — Confirm your location</p>
+      <app-fb-map
+        class="block mb-3"
+        [config]="locationConfig()"
+        (locationChange)="onLocationPicked($event)"
+      />
+      @if (location(); as loc) {
+        <p class="fb-help mb-3">
+          <i class="fa-solid fa-location-dot mr-1 text-primary"></i>Pin set at
+          {{ loc.lat | number: '1.4-4' }}, {{ loc.lng | number: '1.4-4' }}
+        </p>
+      } @else if (locationError()) {
+        <p class="text-red-500 text-xs mb-3">{{ locationError() }}</p>
+      } @else {
+        <p class="fb-help mb-3">Drop a pin on the map to set your location</p>
+      }
+      <div class="mb-3">
+        <app-button
+          variant="outline"
+          icon="fa-solid fa-location-crosshairs"
+          [block]="true"
+          (clicked)="captureGps()"
+        >
+          Use current GPS location
+        </app-button>
+      </div>
+      <div class="flex gap-2">
+        <div class="flex-1">
+          <app-button variant="outline" [block]="true" (clicked)="goToStep(2)">Back</app-button>
+        </div>
+        <div class="flex-1">
+          <app-button
+            icon="fa-solid fa-arrow-right"
+            iconPosition="right"
+            [block]="true"
+            (clicked)="proceedToMobile()"
+          >
+            Continue
+          </app-button>
+        </div>
+      </div>
+    }
+
+    <!-- Step 4: Mobile → verify → create -->
+    @case (4) {
+      @if (!mobileVerified()) {
+        <p class="small-label mb-3">Step 4 — Verify your mobile</p>
+        <p class="auth-subtitle">
+          Enter your mobile number and we'll send a one-time code to confirm it.
+        </p>
+        <form [formGroup]="form">
+          <app-input
+            type="tel"
+            prefix="+91"
+            prefixIcon="fa-solid fa-phone"
+            inputmode="numeric"
+            autocomplete="tel-national"
+            [maxlength]="10"
+            placeholder="98765 43210"
+            [required]="true"
+            hint="We'll text a 6-digit verification code. Standard rates may apply."
+            [error]="err('mobile')"
+            formControlName="mobile"
+          />
+        </form>
+        <div class="flex gap-2 mt-6">
+          <div class="flex-1">
+            <app-button variant="outline" [block]="true" (clicked)="stepBack(3)">Back</app-button>
+          </div>
+          <div class="flex-1">
+            <app-button
+              icon="fa-solid fa-paper-plane"
+              [block]="true"
+              [loading]="sendingOtp()"
+              (clicked)="sendCode()"
+            >
+              {{ sendingOtp() ? 'Sending…' : 'Send OTP' }}
+            </app-button>
+          </div>
+        </div>
+      } @else {
+        <div class="text-center">
+          <div class="mb-3 flex justify-center">
+            <app-success-anim [size]="120" label="Mobile verified" />
+          </div>
+          <h4 class="text-xl font-bold tracking-tight">Mobile verified</h4>
+          <p class="text-muted text-sm">
+            You're registering as a <b>{{ finishRoleLabel() }}</b
+            >. Create your account to continue.
+          </p>
+          <div class="mt-4">
+            <app-button
+              icon="fa-solid fa-circle-check"
+              iconPosition="right"
+              [block]="true"
+              [loading]="submitting()"
+              (clicked)="finish()"
+            >
+              {{ submitting() ? 'Creating account…' : 'Create account' }}
+            </app-button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

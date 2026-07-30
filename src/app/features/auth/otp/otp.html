@@ -1,0 +1,42 @@
+<div class="mx-auto w-full max-w-[520px]">
+  <span class="auth-eyebrow">Verify</span>
+  <h1 class="auth-title">Enter the code</h1>
+  <p class="auth-subtitle">
+    We sent a 6-digit code to <b class="text-primary">+91 {{ pendingMobile() }}</b
+    >.
+  </p>
+
+  <div class="flex justify-center gap-1 mb-3">
+    @for (control of otp.controls; track $index) {
+      <input
+        #box
+        type="text"
+        inputmode="numeric"
+        maxlength="1"
+        class="otp-input"
+        [formControl]="control"
+        (input)="onInput($index, $event)"
+        (keydown)="onKeydown($index, $event)"
+        (paste)="onPaste($event)"
+      />
+    }
+  </div>
+
+  <div class="flex gap-2 mt-6">
+    <div class="flex-1">
+      <app-button variant="outline" (click)="back()" [block]="true"> Change number </app-button>
+    </div>
+    <div class="flex-1">
+      <app-button
+        type="button"
+        [disabled]="verifying()"
+        (click)="verify()"
+        [loading]="verifying()"
+        [block]="true"
+        icon="fa-solid fa-check"
+      >
+        {{ verifying() ? 'Verifying…' : 'Verify & Continue' }}
+      </app-button>
+    </div>
+  </div>
+</div>

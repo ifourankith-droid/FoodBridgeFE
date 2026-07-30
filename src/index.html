@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FoodBridge</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#d87757" />
+    <!-- Modern browsers take the SVG and scale it crisply; the .ico (16/32/48/64)
+         is the fallback for older ones and for the Windows taskbar. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+  </head>
+  <body>
+    <!-- Apply the saved theme before first paint. Without this the page renders
+       with the default palette until ThemeService boots, flashing the wrong
+       brand colour. Keep the storage keys in sync with theme.service.ts. -->
+    <script>
+      (function () {
+        try {
+          var c = [];
+          if (JSON.parse(localStorage.getItem('foodbridge.theme.dark'))) c.push('dark');
+          var b = JSON.parse(localStorage.getItem('foodbridge.theme.brand'));
+          if (typeof b === 'string' && /^[a-z]+$/.test(b)) c.push('theme-' + b);
+          if (c.length) document.body.className = c.join(' ');
+        } catch (e) {}
+      })();
+    </script>
+    <app-root></app-root>
+  </body>
+</html>
