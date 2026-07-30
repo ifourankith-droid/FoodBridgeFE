@@ -10,6 +10,8 @@ export const environment = {
   apiUrl: `${API_ORIGIN}/api`,
   hubUrl: `${API_ORIGIN}/hubs`,
   useMockAuth: false,
+  // Keep in step with the backend's Features:RecipientRoleEnabled.
+  recipientRoleEnabled: false,
   googleMapsApiKey: '',
   mapDefaultCenter: { lat: 23.0225, lng: 72.5714 },
   mapDefaultZoom: 13,

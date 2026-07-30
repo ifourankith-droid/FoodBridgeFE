@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { API_ENDPOINTS } from '../config/api-endpoints';
 import { ApiService } from '../http/api.service';
 import { UpdateProfileBody, UserProfile } from '../models/user.model';
+import { UserDocumentType, UserVerification } from '../models/verification.model';
 
 /** Result of POST /users/{id}/avatar. */
 export interface AvatarUploadResult {
@@ -35,5 +36,25 @@ export class UserService {
     const form = new FormData();
     form.append('file', file);
     return this.api.post<AvatarUploadResult>(API_ENDPOINTS.users.avatar(id), form);
+  }
+
+  /**
+   * Verification status and submitted documents. Self, or an admin reviewing the account —
+   * both read the same payload so the two screens can never disagree.
+   */
+  getVerification(id: string): Observable<UserVerification> {
+    return this.api.get<UserVerification>(API_ENDPOINTS.users.verification(id));
+  }
+
+  /**
+   * Upload or replace one verification document (multipart, JPG/PNG/PDF, max 5MB; a Selfie must
+   * be an image). Re-uploading the same `type` replaces it server-side and deletes the old file,
+   * so a bad photo can simply be retaken. Returns the refreshed verification state.
+   */
+  uploadDocument(id: string, type: UserDocumentType, file: File): Observable<UserVerification> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', type);
+    return this.api.post<UserVerification>(API_ENDPOINTS.users.documents(id), form);
   }
 }

@@ -25,6 +25,10 @@ export const API_ENDPOINTS = {
     byId: (id: Id) => `users/${id}`,
     availability: (id: Id) => `users/${id}/availability`,
     avatar: (id: Id) => `users/${id}/avatar`,
+    /** Verification status + submitted documents. Self, or admin reviewing. */
+    verification: (id: Id) => `users/${id}/verification`,
+    /** Upload/replace one verification document (multipart: `file` + `type`). Self only. */
+    documents: (id: Id) => `users/${id}/documents`,
   },
 
   // Donor saved pickup addresses (DonorOnly, self)
@@ -65,10 +69,12 @@ export const API_ENDPOINTS = {
     recipient: 'dashboard/recipient',
   },
 
-  // Admin-managed fallback drop-off locations (surfaces via suggestedDropOffLocation).
+  // Shared pool of drop-off points: admin-curated partner sites plus recipient hotspots
+  // volunteers add at confirm-delivery. CRUD is AdminOnly; `hotspots` is VolunteerOnly.
   // No DELETE server-side — retire a location with `deactivate` instead.
   dropoffLocations: {
     base: 'dropoff-locations',
+    hotspots: 'dropoff-locations/hotspots',
     activate: (id: Id) => `dropoff-locations/${id}/activate`,
     deactivate: (id: Id) => `dropoff-locations/${id}/deactivate`,
   },

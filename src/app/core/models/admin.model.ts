@@ -35,6 +35,15 @@ export interface AdminAccount {
   accountStatus: string;
   isAvailable: boolean;
   createdAtUtc: string;
+  /** Verification documents this role must submit; empty when none are needed. */
+  requiredDocumentTypes: string[];
+  /** What they've actually uploaded. */
+  submittedDocumentTypes: string[];
+  /**
+   * Pending *and* everything required is in — i.e. waiting on the admin, not on the user.
+   * Server-computed, so don't re-derive it from the two arrays above.
+   */
+  isReadyForReview: boolean;
 }
 
 /**

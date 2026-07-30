@@ -132,8 +132,29 @@ export class ListingService {
     return this.api.post<ApiListing>(API_ENDPOINTS.listings.confirmPickup(id), this.photo(photo));
   }
 
-  confirmDelivery(id: string, photo: File): Observable<ApiListing> {
-    return this.api.post<ApiListing>(API_ENDPOINTS.listings.confirmDelivery(id), this.photo(photo));
+  /**
+   * Confirms delivery, recording where the food went. Completes the donation outright
+   * (`status: 'Confirmed'`, points + certificate issued) when no recipient was matched;
+   * otherwise moves to `Delivered` for the recipient to confirm.
+   *
+   * `dropOff` is required by the backend: pass `{ locationId }` for a spot that already
+   * exists, or `{ latitude, longitude, name }` for one the volunteer found — the latter is
+   * saved to the shared pool so every volunteer can use it next time. Supplying both, or
+   * neither, is a 422.
+   */
+  confirmDelivery(id: string, photo: File, dropOff: DropOffSelection): Observable<ApiListing> {
+    const form = this.photo(photo);
+    if ('locationId' in dropOff) {
+      form.append('dropOffLocationId', dropOff.locationId);
+    } else {
+      form.append('latitude', String(dropOff.latitude));
+      form.append('longitude', String(dropOff.longitude));
+      form.append('locationName', dropOff.name);
+      if (dropOff.address) {
+        form.append('locationAddress', dropOff.address);
+      }
+    }
+    return this.api.post<ApiListing>(API_ENDPOINTS.listings.confirmDelivery(id), form);
   }
 
   private photo(file: File): FormData {
@@ -142,3 +163,12 @@ export class ListingService {
     return form;
   }
 }
+
+/**
+ * Where a delivery was dropped. A discriminated union rather than one shape with every
+ * field optional, so "existing spot" and "new spot" can't be half-filled at a call site —
+ * the backend rejects an ambiguous combination with a 422.
+ */
+export type DropOffSelection =
+  | { locationId: string }
+  | { latitude: number; longitude: number; name: string; address?: string };

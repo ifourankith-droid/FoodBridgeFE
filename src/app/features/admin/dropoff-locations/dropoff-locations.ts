@@ -150,6 +150,14 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
                   <i class="fa-solid fa-city mr-1"></i>{{ l.city }} ·
                 }
                 <i class="fa-solid fa-location-crosshairs mr-1"></i>{{ l.latitude.toFixed(4) }}, {{ l.longitude.toFixed(4) }}
+                <!-- Volunteer-added spots go live without review, so make their origin
+                     obvious: this badge is how an admin spots one worth retiring. -->
+                @if (l.source === 'Volunteer') {
+                  ·
+                  <span class="src-tag">
+                    <i class="fa-solid fa-user-plus mr-1"></i>added by a volunteer
+                  </span>
+                }
               </div>
               @if (l.isActive) {
                 <button
@@ -201,6 +209,14 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
     .warn-strip i {
       margin-top: 2px;
       color: #dc2626;
+    }
+    .src-tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--fb-primary-soft);
+      color: var(--fb-primary-deep);
+      font-weight: 700;
     }
     .loc-pin {
       width: 34px;

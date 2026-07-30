@@ -1,11 +1,14 @@
+/** Where a drop-off point came from. */
+export type DropOffLocationSource = 'Admin' | 'Volunteer';
+
 /**
- * Admin-managed fallback drop-off points — `DropOffLocationResponse`.
+ * A place food can be taken — `DropOffLocationResponse`.
  *
- * These are the physical places a volunteer takes food to when the backend's
- * `RecipientMatcher` finds no eligible NGO at confirm-pickup time. The matcher
- * picks the *nearest active* row from this table and returns it on the
- * confirm-pickup response as `ApiListing.suggestedDropOffLocation` — so an empty
- * or all-inactive table means the fallback never fires.
+ * The pool is shared and grows two ways: admins curate partner collection points
+ * (`source: 'Admin'`), and volunteers add spots they find in the field when recording
+ * a delivery (`source: 'Volunteer'`, live immediately). The nearest *available* one —
+ * skipping anything on cooldown — is suggested on the confirm-pickup response as
+ * `ApiListing.suggestedDropOffLocation`.
  */
 export interface DropOffLocation {
   id: string;
@@ -15,7 +18,34 @@ export interface DropOffLocation {
   longitude: number;
   city: string | null;
   isActive: boolean;
+  source: DropOffLocationSource;
   createdAtUtc: string;
+}
+
+/**
+ * A drop-off point as the volunteer's hotspot map shows it — `DropOffHotspotResponse`.
+ *
+ * Ordered by the backend as available-first then nearest, so `[0]` is where the food
+ * being carried should go. Spots on cooldown are still returned (flagged) rather than
+ * omitted, so the map explains why a closer spot isn't being suggested.
+ */
+export interface DropOffHotspot {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  city: string | null;
+  source: DropOffLocationSource;
+  distanceKm: number;
+  /** All-time deliveries here — the hotspot's intensity. */
+  deliveryCount: number;
+  totalMeals: number;
+  lastDeliveredAtUtc: string | null;
+  /** Served recently; shouldn't receive another delivery yet. */
+  isCoolingDown: boolean;
+  /** When it frees up again; null when already available. */
+  cooldownUntilUtc: string | null;
 }
 
 /**

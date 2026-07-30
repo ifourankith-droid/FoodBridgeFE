@@ -19,11 +19,20 @@ export interface Notification {
  * the fallback rather than breaking the list.
  */
 export type NotificationType =
+  // → volunteers within 10km of a new listing
   | 'NewListingNearby'
+  // → the assigned volunteer
   | 'DropOffLocationSuggested'
   | 'RecipientRequested'
-  | 'DonationConfirmed'
+  | 'ClaimExpired'
   | 'PointsAwarded'
+  // → the donor, tracking their donation through the volunteer's hands
+  | 'ListingClaimed'
+  | 'ListingPickedUp'
+  | 'ListingUnclaimed'
+  | 'ListingExpired'
+  | 'DonationConfirmed'
+  // client-side only
   | 'Local';
 
 /**
@@ -93,6 +102,18 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
     // carrying → the delivery card that now has a known destination.
     action: { view: 'deliveries', label: 'Open my deliveries' },
   },
+  ClaimExpired: {
+    icon: 'fa-solid fa-hourglass-end',
+    color: '#c7442a',
+    label: 'Claim expired',
+    category: 'pickups',
+    // Their claim lapsed and the listing left their deliveries → back to the open feed.
+    action: { view: 'nearby', label: 'Find another pickup' },
+  },
+  // ---- Donor-facing: their donation moving through the volunteer's hands ----
+  // NOTE: `categoryColor()` returns the first entry it finds per category, so the
+  // representative of 'donations' must stay first in this group — DonationConfirmed's green
+  // is the Donations chip colour in the inbox breakdown. Inserting above it repaints that chip.
   DonationConfirmed: {
     icon: 'fa-solid fa-circle-check',
     color: 'var(--fb-success)',
@@ -100,6 +121,36 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
     category: 'donations',
     // The body tells the donor a certificate was issued → their certificates.
     action: { view: 'certificates', label: 'View certificates' },
+  },
+  ListingClaimed: {
+    icon: 'fa-solid fa-hand',
+    color: 'var(--fb-primary)',
+    label: 'Donation claimed',
+    category: 'donations',
+    action: { view: 'listings', label: 'View my donations' },
+  },
+  ListingPickedUp: {
+    icon: 'fa-solid fa-truck-fast',
+    color: 'var(--fb-primary)',
+    label: 'Donation collected',
+    category: 'donations',
+    action: { view: 'listings', label: 'View my donations' },
+  },
+  ListingUnclaimed: {
+    icon: 'fa-solid fa-rotate-left',
+    color: '#d97706',
+    label: 'Claim released',
+    category: 'donations',
+    action: { view: 'listings', label: 'View my donations' },
+  },
+  ListingExpired: {
+    icon: 'fa-solid fa-clock',
+    color: 'var(--fb-muted)',
+    label: 'Donation expired',
+    // 'donations', not 'updates': it's an outcome of the donor's own donation and belongs
+    // beside the rest of that lifecycle, rather than buried in a generic bucket.
+    category: 'donations',
+    action: { view: 'listings', label: 'View my donations' },
   },
   PointsAwarded: {
     icon: 'fa-solid fa-star',

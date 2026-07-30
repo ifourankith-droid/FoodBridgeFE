@@ -3,6 +3,7 @@ import { AdminAccount } from '@core/models/admin.model';
 import { AdminService } from '@core/services/admin.service';
 import { DialogService } from '@core/services/dialog.service';
 import { ToastService } from '@core/services/toast.service';
+import { UserService } from '@core/services/user.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
@@ -117,6 +118,38 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
                 <i class="fa-solid fa-mobile-screen mr-1"></i>{{ a.mobile }} ·
                 <i class="fa-solid fa-clock mr-1"></i>Joined {{ joined(a.createdAtUtc) }}
               </div>
+
+              <!-- Evidence, for the roles that need it. Approving without opening these is
+                   exactly what this feature exists to prevent, so the links are inline on the
+                   card rather than behind another click. -->
+              @if (a.requiredDocumentTypes.length > 0) {
+                <div class="docs" [class.ready]="a.isReadyForReview">
+                  @if (a.isReadyForReview) {
+                    <div class="docs-head text-success-deep">
+                      <i class="fa-solid fa-folder-open mr-1"></i>Documents ready to review
+                    </div>
+                  } @else if (a.accountStatus === 'Pending') {
+                    <div class="docs-head text-muted">
+                      <i class="fa-solid fa-hourglass-half mr-1"></i>
+                      Waiting on them — {{ missingCount(a) }} of
+                      {{ a.requiredDocumentTypes.length }} still to upload
+                    </div>
+                  }
+                  <div class="flex flex-wrap gap-2 mt-1">
+                    @for (type of a.requiredDocumentTypes; track type) {
+                      @if (hasDoc(a, type)) {
+                        <button type="button" class="doc-link" (click)="openDocument(a, type)">
+                          <i class="fa-solid fa-up-right-from-square mr-1"></i>{{ docLabel(type) }}
+                        </button>
+                      } @else {
+                        <span class="doc-missing">
+                          <i class="fa-solid fa-xmark mr-1"></i>{{ docLabel(type) }}
+                        </span>
+                      }
+                    }
+                  </div>
+                </div>
+              }
               <div class="flex gap-2">
                 @switch (a.accountStatus) {
                   @case ('Verified') {
@@ -172,9 +205,48 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
       }
     </app-page-wrapper>
   `,
+  styles: [
+    `
+      .docs {
+        padding: 8px 10px;
+        margin-bottom: 12px;
+        border: 1px dashed var(--fb-line);
+        border-radius: 12px;
+      }
+      .docs.ready {
+        border-style: solid;
+        border-color: var(--fb-success);
+        background: var(--fb-success-soft);
+      }
+      .docs-head {
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+      .doc-link,
+      .doc-missing {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 9px;
+        border-radius: 999px;
+      }
+      .doc-link {
+        background: var(--fb-surface);
+        border: 1px solid var(--fb-line);
+        color: var(--fb-primary-deep);
+      }
+      .doc-link:hover {
+        border-color: var(--fb-primary);
+      }
+      .doc-missing {
+        background: var(--fb-line);
+        color: var(--fb-muted);
+      }
+    `,
+  ],
 })
 export class Verifications {
   private readonly admin = inject(AdminService);
+  private readonly users = inject(UserService);
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
 
@@ -195,9 +267,43 @@ export class Verifications {
     [...this.accounts()].sort(
       (a, b) =>
         (this.order[a.accountStatus] ?? 9) - (this.order[b.accountStatus] ?? 9) ||
+        // Within Pending, the accounts the admin can actually act on come before those still
+        // waiting on the user — otherwise the top of the queue is full of un-actionable rows.
+        Number(b.isReadyForReview) - Number(a.isReadyForReview) ||
         a.name.localeCompare(b.name),
     ),
   );
+
+  protected missingCount(a: AdminAccount): number {
+    return a.requiredDocumentTypes.filter((t) => !a.submittedDocumentTypes.includes(t)).length;
+  }
+
+  protected hasDoc(a: AdminAccount, type: string): boolean {
+    return a.submittedDocumentTypes.includes(type);
+  }
+
+  protected docLabel(type: string): string {
+    return type === 'IdProof' ? 'Photo ID' : type === 'Selfie' ? 'Selfie' : type;
+  }
+
+  /**
+   * Opens the file in a new tab. The list response only carries document *types*, not URLs, so the
+   * per-user verification endpoint is fetched on demand — the admin opens a handful of documents,
+   * not every URL on every page load.
+   */
+  protected openDocument(a: AdminAccount, type: string): void {
+    this.users.getVerification(a.id).subscribe({
+      next: (v) => {
+        const doc = v.documents.find((d) => d.type === type);
+        if (!doc) {
+          this.toast.error('That document is no longer available.');
+          return;
+        }
+        window.open(doc.fileUrl, '_blank', 'noopener');
+      },
+      error: (err: Error) => this.toast.error(err.message || 'Could not open the document'),
+    });
+  }
 
   constructor() {
     this.load();

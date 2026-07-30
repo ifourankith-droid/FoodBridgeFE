@@ -4,10 +4,11 @@ import { LocationBroadcastService } from '@core/realtime/location-broadcast.serv
 import { LayoutService } from '@core/services/layout.service';
 import { Sidebar } from './sidebar/sidebar';
 import { Topbar } from './topbar/topbar';
+import { VerificationBanner } from './verification-banner/verification-banner';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, Sidebar, Topbar],
+  imports: [RouterOutlet, Sidebar, Topbar, VerificationBanner],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
   styles: `

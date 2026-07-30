@@ -15,6 +15,7 @@ import { openRaiseDisputeDialog } from '@shared/ui/dispute-dialog/dispute-dialog
 import { ListingCard, ListingCardData } from '@shared/ui/listing-card/listing-card';
 import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
 import { openPhotoDialog } from '@shared/ui/image-picker/photo-dialog';
+import { openDeliveryDialog } from './delivery-dialog';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { openRouteDialog, RouteContact, RouteStop } from '@shared/ui/route-dialog/route-dialog';
 import { environment } from '@env/environment';
@@ -203,9 +204,9 @@ const DEFAULT_ORIGIN: FbLatLng = {
                   <div class="min-w-0">
                     <div class="font-bold">
                       @if (row.stage === 'done') {
-                        Fallback drop-off point
+                        Drop-off point
                       } @else {
-                        No recipient available — drop off here
+                        Deliver the food here
                       }
                     </div>
                     <div>{{ drop.name }} · {{ drop.address }}</div>
@@ -244,7 +245,7 @@ const DEFAULT_ORIGIN: FbLatLng = {
                       size="sm"
                       icon="fa-solid fa-hand"
                       [block]="true"
-                      (clicked)="start(row.id, 'pickup')"
+                      (clicked)="start(row, 'pickup')"
                     >
                       Confirm pickup
                     </app-button>
@@ -253,7 +254,7 @@ const DEFAULT_ORIGIN: FbLatLng = {
                       size="sm"
                       icon="fa-solid fa-box-open"
                       [block]="true"
-                      (clicked)="start(row.id, 'delivery')"
+                      (clicked)="start(row, 'delivery')"
                     >
                       Confirm delivery
                     </app-button>
@@ -550,12 +551,20 @@ export class Deliveries {
     }
   }
 
+  /**
+   * A donation completes one of two ways, so the finished label has to say which:
+   * with a matched recipient the volunteer's part ends at Delivered and the recipient
+   * confirms; with none it went to a drop-off point and confirming the delivery
+   * completed the donation outright.
+   */
   protected doneLabel(l: ApiListing): string {
     switch (l.status) {
       case 'Delivered':
         return 'Delivered — waiting for the recipient to confirm';
       case 'Confirmed':
-        return 'Confirmed by the recipient — thank you!';
+        return l.recipientName
+          ? 'Confirmed by the recipient — thank you!'
+          : 'Delivered and confirmed — points awarded, thank you!';
       default:
         return `This listing is now ${l.status.toLowerCase()}`;
     }
@@ -574,32 +583,52 @@ export class Deliveries {
    * dialog stays open with the photo intact, so a retry doesn't mean walking
    * back to re-shoot it.
    */
-  protected start(id: string, action: 'pickup' | 'delivery'): void {
-    const isPickup = action === 'pickup';
+  protected start(row: DeliveryRow, action: 'pickup' | 'delivery'): void {
+    const id = row.id;
+
+    if (action === 'delivery') {
+      // Delivery gets its own dialog: alongside the photo the backend now requires *where*
+      // the food went, which pickup has no equivalent of.
+      openDeliveryDialog(
+        this.dialog,
+        {
+          latitude: row.source.latitude,
+          longitude: row.source.longitude,
+          suggestedLocationId: row.source.suggestedDropOffLocation?.id ?? null,
+          // Without a matched recipient this confirmation is the last step — nobody is left
+          // to confirm receipt afterward, so the photo is the delivery record itself.
+          completesDonation: !row.source.recipientName,
+        },
+        (photo, dropOff) => this.submitStep(this.store.confirmDelivery(id, photo, dropOff)),
+      );
+      return;
+    }
+
     openPhotoDialog(this.dialog, {
-      title: isPickup ? 'Confirm pickup' : 'Confirm delivery',
+      title: 'Confirm pickup',
       subtitle: 'A photo is required to confirm this step.',
-      icon: isPickup ? 'fa-solid fa-hand' : 'fa-solid fa-box-open',
-      confirmLabel: isPickup ? 'Confirm pickup' : 'Confirm delivery',
-      hint: isPickup
-        ? 'Photograph the food as you collect it.'
-        : 'Photograph the handover, so the recipient can confirm it.',
-      submit: (photo) =>
-        (isPickup
-          ? this.store.confirmPickup(id, photo)
-          : this.store.confirmDelivery(id, photo)
-        ).pipe(
-          tap((l) => this.announceConfirmed(l)),
-          catchError((err: Error) => {
-            this.toast.show(
-              'fa-solid fa-triangle-exclamation',
-              err.message || 'Could not confirm this step',
-            );
-            // Swallowed so the dialog stays open and the photo survives a retry.
-            return EMPTY;
-          }),
-        ),
+      icon: 'fa-solid fa-hand',
+      confirmLabel: 'Confirm pickup',
+      hint: 'Photograph the food as you collect it.',
+      submit: (photo) => this.submitStep(this.store.confirmPickup(id, photo)),
     });
+  }
+
+  /**
+   * Shared tail for both confirmations: announce the outcome, and on failure toast and
+   * swallow so the dialog stays open with the photo (and chosen spot) intact for a retry.
+   */
+  private submitStep(request: Observable<ApiListing>): Observable<ApiListing> {
+    return request.pipe(
+      tap((l) => this.announceConfirmed(l)),
+      catchError((err: Error) => {
+        this.toast.show(
+          'fa-solid fa-triangle-exclamation',
+          err.message || 'Could not confirm this step',
+        );
+        return EMPTY;
+      }),
+    );
   }
 
   /** Says what happens next, which differs by whether a recipient was matched. */
@@ -609,12 +638,19 @@ export class Deliveries {
       this.toast.show(
         'fa-solid fa-circle-check',
         drop
-          ? `Pickup confirmed — no recipient available, take it to ${drop.name}`
+          ? `Pickup confirmed — take it to ${drop.name}`
           : 'Pickup confirmed — deliver to the matched recipient',
       );
       return;
     }
-    this.toast.show('fa-solid fa-circle-check', 'Delivery confirmed — thank you!');
+    // Confirmed straight from the delivery confirmation means there was no recipient to
+    // wait on — the donation is finished and the points are already awarded.
+    this.toast.show(
+      'fa-solid fa-circle-check',
+      listing.status === 'Confirmed'
+        ? 'Delivery confirmed — donation complete, points awarded!'
+        : 'Delivery confirmed — thank you!',
+    );
   }
 
   /** Hand a claim back (Claimed → Pending) so another volunteer can take it. */

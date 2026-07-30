@@ -34,11 +34,18 @@ export class Register {
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
-  protected readonly roleOptions: readonly RoleOption[] = [
-    { value: 'donor', icon: 'fa-solid fa-utensils', label: 'Donor' },
-    { value: 'volunteer', icon: 'fa-solid fa-truck-fast', label: 'Volunteer' },
-    { value: 'recipient', icon: 'fa-solid fa-hand-holding-heart', label: 'Recipient' },
-  ];
+  /**
+   * Selectable roles. Recipient is filtered out while the role is disabled — the
+   * backend refuses a Recipient registration too, so offering the card would only
+   * lead the user through four wizard steps to a 422 at the end.
+   */
+  protected readonly roleOptions: readonly RoleOption[] = (
+    [
+      { value: 'donor', icon: 'fa-solid fa-utensils', label: 'Donor' },
+      { value: 'volunteer', icon: 'fa-solid fa-truck-fast', label: 'Volunteer' },
+      { value: 'recipient', icon: 'fa-solid fa-hand-holding-heart', label: 'Recipient' },
+    ] as const satisfies readonly RoleOption[]
+  ).filter((option) => option.value !== 'recipient' || environment.recipientRoleEnabled);
 
   protected readonly step = signal(1);
   protected readonly submitting = signal(false);

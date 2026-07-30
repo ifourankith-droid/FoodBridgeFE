@@ -2,7 +2,7 @@ import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiListing } from '@core/models/listing-api.model';
 import { AuthService } from './auth.service';
-import { ListingService } from './listing.service';
+import { DropOffSelection, ListingService } from './listing.service';
 import { StorageService } from './storage.service';
 
 /** localStorage key prefix — one bucket per volunteer id, so accounts never mix. */
@@ -43,7 +43,11 @@ export class VolunteerDeliveriesStore {
   /** Collected and on the way to the recipient or drop-off point. */
   readonly inTransit = computed(() => this.items().filter((l) => l.status === 'PickedUp'));
 
-  /** Handed over — delivered by this volunteer, and confirmed once the recipient signs off. */
+  /**
+   * Handed over. `Confirmed` arrives either from a recipient signing off on a `Delivered`
+   * listing, or directly from this volunteer's own confirm-delivery when no recipient was
+   * matched — both are finished work from the volunteer's point of view.
+   */
   readonly completed = computed(() =>
     this.items().filter((l) => l.status === 'Delivered' || l.status === 'Confirmed'),
   );
@@ -80,8 +84,8 @@ export class VolunteerDeliveriesStore {
     return this.listingService.confirmPickup(id, photo).pipe(tap((l) => this.upsert(l)));
   }
 
-  confirmDelivery(id: string, photo: File): Observable<ApiListing> {
-    return this.listingService.confirmDelivery(id, photo).pipe(tap((l) => this.upsert(l)));
+  confirmDelivery(id: string, photo: File, dropOff: DropOffSelection): Observable<ApiListing> {
+    return this.listingService.confirmDelivery(id, photo, dropOff).pipe(tap((l) => this.upsert(l)));
   }
 
   /**

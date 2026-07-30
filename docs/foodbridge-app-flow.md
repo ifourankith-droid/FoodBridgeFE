@@ -428,6 +428,65 @@ These are hard rules for this codebase. Follow them exactly when adding or chang
   `pending → claimed → pickedup → delivered → confirmed` (+ `expired`). Status colors use `badge-*`.
 - Demo OTP is `123456`; demo users per §1.2.
 
+### 14.6 Recipient role is currently DISABLED (`environment.recipientRoleEnabled = false`)
+The app runs on **three roles: Donor, Volunteer, Admin.** Mirrors the backend's
+`Features:RecipientRoleEnabled` — **keep the two in step**, they must agree.
+
+What the flag changes:
+- **Registration** — the Recipient card is filtered out of `roleOptions` in `register.ts`, and the
+  role grid switches to `grid-cols-2`. The backend refuses `role: "Recipient"` with a 422 anyway, so
+  offering the card would just walk the user through four wizard steps into an error.
+- **The volunteer's Confirm Delivery now completes the donation.** Because nothing matches a recipient
+  any more, `confirm-delivery` returns `status: "Confirmed"` (not `"Delivered"`) and the points and the
+  donor's certificate are already issued. `deliveries.ts` reads `recipientName` to decide its copy —
+  the dialog hint, the done-label, and the toast all differ between "handover, recipient will confirm"
+  and "drop-off, donation complete".
+
+What the flag deliberately does **not** change:
+- Recipient views (`incoming`, `track`, recipient `reports`, the recipient `dashboard`/`history`
+  branches) stay in `APP_VIEWS` and stay routable. They're already `roleGuard`-gated on the *actual*
+  logged-in role, so a Donor/Volunteer/Admin can never reach them — but an existing Recipient account
+  signs in and works exactly as before. Do not strip these; re-enabling is one flag.
+- Any `role === 'recipient'` branch in `dashboard.ts`, `history.ts`, `profile.ts`,
+  `availability.service.ts`, etc. — all still needed for those existing accounts.
+
+### 14.7 Recipient hotspots & the delivery cooldown
+The volunteer's **Recipient Hotspots** view (`features/volunteer/hotspots`) maps the shared pool of
+drop-off points, pins coloured by how many deliveries each has received, so a volunteer can see where
+demand concentrates. Read-only — spots are added implicitly at confirm-delivery.
+
+- **`confirm-delivery` now requires a drop-off point.** `features/volunteer/deliveries/delivery-dialog.ts`
+  collects the photo *and* the location: nearby spots pre-selected with the one confirm-pickup
+  suggested, or "add a new spot" with a name plus `GeolocationService` coordinates. Pass the choice as
+  `ListingService.DropOffSelection` — a discriminated union (`{ locationId }` | `{ latitude, longitude,
+  name }`), so a call site can't half-fill both shapes; the backend 422s an ambiguous combination.
+- **Don't re-sort hotspots by distance.** The backend orders them *available-first, then nearest*, so
+  `[0]` is the correct next destination. Sorting by `distanceKm` alone floats a cooling-down spot to
+  the top.
+- **Spots on cooldown are returned, not filtered.** Render them disabled with their
+  `cooldownUntilUtc`, so the volunteer sees why a closer spot isn't offered. The cooldown is global
+  (any volunteer's delivery starts it for everyone) — mirrors the backend's `DropOff:CooldownHours`.
+- `source: 'Volunteer'` marks a crowd-sourced spot; badge it so admins and volunteers can tell it
+  from a verified partner site.
+
+### 14.8 Volunteer verification (Pending accounts)
+A volunteer registers as `accountStatus: 'Pending'` and **cannot claim or collect** until an admin has
+reviewed their photo ID and selfie. They *can* sign in, browse listings and see the hotspot map.
+
+- **`features/volunteer/verification`** — their own checklist: status banner (whose turn it is),
+  per-document upload/replace via the shared photo dialog, and privacy note. The selfie step is
+  camera-only (`sources: 'camera'`) and image-only; the ID step also accepts PDF.
+- **`features/shell/verification-banner`** — shell-wide notice on every page for a non-verified
+  volunteer, linking to the upload screen. Without it, a Pending volunteer browses happily and then
+  hits a bare 422 on Claim with no explanation. Renders nothing for verified users or other roles.
+- **`UserVerification.isReadyForReview` and `AdminAccount.isReadyForReview` are server-computed** —
+  don't re-derive "waiting on me vs waiting on them" from the document arrays, or the volunteer's
+  screen and the admin queue will eventually disagree.
+- **Admin `verifications`** shows required-vs-submitted per account, sorts actionable rows to the top
+  of Pending, and links each document to open in a new tab (fetched on demand from
+  `GET /users/{id}/verification` — the list response carries types, not URLs).
+- Uploads are **self only**; the admin reads the same endpoint but cannot upload for someone.
+
 ---
 
 ## 15. API endpoints, routes & path aliases (configuration)

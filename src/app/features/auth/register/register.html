@@ -27,7 +27,11 @@
     <!-- Step 1: Role -->
     @case (1) {
       <p class="small-label mb-3">Step 1 — Choose your role</p>
-      <div class="grid grid-cols-3 gap-3">
+      <div
+        class="grid gap-3"
+        [class.grid-cols-2]="roleOptions.length === 2"
+        [class.grid-cols-3]="roleOptions.length === 3"
+      >
         @for (option of roleOptions; track option.value) {
           <div
             class="role-card"

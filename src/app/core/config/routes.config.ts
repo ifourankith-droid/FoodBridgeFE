@@ -62,6 +62,20 @@ export const APP_VIEWS: readonly AppView[] = [
     load: () => import('@features/volunteer/deliveries/deliveries').then((m) => m.Deliveries),
   },
   {
+    id: 'verification',
+    title: 'Verification',
+    icon: 'fa-solid fa-id-card',
+    roles: ['volunteer'],
+    load: () => import('@features/volunteer/verification/verification').then((m) => m.Verification),
+  },
+  {
+    id: 'hotspots',
+    title: 'Recipient Hotspots',
+    icon: 'fa-solid fa-fire',
+    roles: ['volunteer'],
+    load: () => import('@features/volunteer/hotspots/hotspots').then((m) => m.Hotspots),
+  },
+  {
     id: 'leaderboard',
     title: 'Leaderboard',
     icon: 'fa-solid fa-ranking-star',
