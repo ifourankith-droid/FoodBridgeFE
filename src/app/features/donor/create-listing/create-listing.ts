@@ -1,14 +1,15 @@
 import { Location } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { APP_ROUTES, AppNavState } from '@core/config/app-routes';
 import { DietType, FreshnessTag, ListingWriteBody, MealType } from '@core/models/listing-api.model';
-import { DonorReport } from '@core/models/report.model';
+import { DonorDashboard } from '@core/models/dashboard.model';
+import { DashboardService } from '@core/services/dashboard.service';
 import { DialogService } from '@core/services/dialog.service';
 import { ListingService } from '@core/services/listing.service';
 import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
-import { ReportService } from '@core/services/report.service';
 import { ToastService } from '@core/services/toast.service';
 import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from '@shared/ui/button/button';
@@ -20,11 +21,6 @@ import { FbSelect } from '@shared/ui/select/select';
 import { appZonedInputToOffsetIso, appZonedNowInput, utcIsoToAppZonedInput } from '@shared/util/timezone';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 import { DonationConsentDialog } from './donation-consent-dialog';
-
-interface NearbyReceiver {
-  name: string;
-  dist: number;
-}
 
 @Component({
   selector: 'app-create-listing',
@@ -47,17 +43,38 @@ interface NearbyReceiver {
           <!-- Pickup address (chosen from the top bar) -->
           <div class="col-span-2">
             <label class="small-label mb-2 block">Pickup Address <span class="text-red-500">*</span></label>
-            @if (activeAddress(); as a) {
+            @if (editId()) {
+              <!-- Editing keeps the listing's own stored pickup address. -->
               <div class="addr-banner">
                 <i class="fa-solid fa-location-dot text-primary"></i>
-                <span class="flex-1 text-sm font-medium truncate">{{ a.label }}</span>
-                <span class="text-muted text-xs hidden sm:inline">Change in the top bar ↑</span>
+                <span class="flex-1 text-sm font-medium truncate">{{ activeAddress()?.label }}</span>
+              </div>
+            } @else if (pickup.addresses().length) {
+              <div class="flex items-stretch gap-2">
+                <app-select
+                  class="flex-1 min-w-0"
+                  [options]="pickupOptions()"
+                  [formControl]="pickupCtrl"
+                  icon="fa-solid fa-location-dot"
+                  placeholder="Choose a pickup address"
+                  [searchable]="pickup.addresses().length > 5"
+                />
+                <button
+                  type="button"
+                  class="addr-add"
+                  title="Add a new pickup address"
+                  aria-label="Add a new pickup address"
+                  (click)="addAddress()"
+                >
+                  <i class="fa-solid fa-plus"></i>
+                </button>
               </div>
             } @else {
-              <div class="addr-banner is-empty">
-                <i class="fa-solid fa-triangle-exclamation text-orange"></i>
-                <span class="flex-1 text-sm">Choose a pickup address from the top-bar selector ↑</span>
-              </div>
+              <button type="button" class="addr-banner is-empty w-full text-left" (click)="addAddress()">
+                <i class="fa-solid fa-circle-plus text-primary"></i>
+                <span class="flex-1 text-sm">Add a pickup address on your Profile page</span>
+                <i class="fa-solid fa-arrow-right text-muted text-xs"></i>
+              </button>
             }
           </div>
 
@@ -70,8 +87,22 @@ interface NearbyReceiver {
           <div class="col-span-2 sm:col-span-1">
             <label class="small-label mb-2 block">Diet</label>
             <div class="flex gap-2">
-              <button type="button" class="btn-fb-outline flex-1 !px-2" [class.selected]="form.controls.dietType.value === 'Veg'" (click)="form.controls.dietType.setValue('Veg')">🥦 Veg</button>
-              <button type="button" class="btn-fb-outline flex-1 !px-2" [class.selected]="form.controls.dietType.value === 'NonVeg'" (click)="form.controls.dietType.setValue('NonVeg')">🍗 Non-Veg</button>
+              <button
+                type="button"
+                class="diet-btn veg"
+                [class.selected]="form.controls.dietType.value === 'Veg'"
+                (click)="form.controls.dietType.setValue('Veg')"
+              >
+                <i class="fa-solid fa-leaf"></i>Veg
+              </button>
+              <button
+                type="button"
+                class="diet-btn nonveg"
+                [class.selected]="form.controls.dietType.value === 'NonVeg'"
+                (click)="form.controls.dietType.setValue('NonVeg')"
+              >
+                <i class="fa-solid fa-drumstick-bite"></i>Non-Veg
+              </button>
             </div>
           </div>
           <div class="col-span-2 sm:col-span-1">
@@ -100,6 +131,7 @@ interface NearbyReceiver {
               label="Photo of the food"
               hint="Optional, but listings with a photo get claimed faster."
               placeholder="Click to upload, or drop a photo here"
+              [existingUrl]="editImageUrl()"
               (fileChange)="onPhotoPicked($event)"
             />
           </div>
@@ -110,7 +142,7 @@ interface NearbyReceiver {
           </div>
         </form>
 
-        <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-4 self-start xl:sticky xl:top-[84px]">
           <!-- Your impact so far -->
           <div class="card-fb p-5">
             <div class="flex items-center gap-3 mb-4">
@@ -121,8 +153,8 @@ interface NearbyReceiver {
               </div>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
-              <div><div class="impact-num">{{ impact()?.totalMealsDonated ?? 0 }}</div><div class="text-muted text-[11px]">Meals saved</div></div>
-              <div><div class="impact-num">{{ impact()?.totalCertificates ?? 0 }}</div><div class="text-muted text-[11px]">Donations</div></div>
+              <div><div class="impact-num">{{ dashboard()?.totalMealsDonated ?? 0 }}</div><div class="text-muted text-[11px]">Meals saved</div></div>
+              <div><div class="impact-num">{{ dashboard()?.totalDonations ?? 0 }}</div><div class="text-muted text-[11px]">Donations</div></div>
               <div><div class="impact-num">{{ co2() }}kg</div><div class="text-muted text-[11px]">CO₂ saved</div></div>
             </div>
           </div>
@@ -147,17 +179,23 @@ interface NearbyReceiver {
                 <div class="stat-icon !mb-0" style="background:var(--fb-primary)"><i class="fa-solid fa-hand-holding-heart"></i></div>
                 <div class="font-bold">Waiting nearby</div>
               </div>
-              <span class="badge-fb bg-primary-soft text-primary-deep">{{ nearby.length }} Active</span>
+              <span class="badge-fb bg-primary-soft text-primary-deep">{{ nearbyRecipients().length }} Active</span>
             </div>
             <div class="space-y-2.5">
-              @for (r of nearby; track r.name) {
+              @for (r of nearbyRecipients(); track r.id) {
                 <div class="flex items-center gap-3">
                   <div class="avatar-circle !w-8 !h-8 !text-xs">{{ r.name.charAt(0) }}</div>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold truncate">{{ r.name }}</div>
-                    <div class="text-muted text-xs">{{ r.dist }} km away</div>
+                    <div class="text-muted text-xs truncate">
+                      {{ r.distanceKm.toFixed(1) }} km away{{ r.city ? ' · ' + r.city : '' }}
+                    </div>
                   </div>
                   <i class="fa-solid fa-location-dot text-muted text-xs"></i>
+                </div>
+              } @empty {
+                <div class="text-muted text-xs py-1">
+                  No recipients nearby yet — choose a pickup address to see who's close.
                 </div>
               }
             </div>
@@ -179,6 +217,36 @@ interface NearbyReceiver {
     .addr-banner.is-empty {
       background: var(--fb-orange-soft);
       border-color: var(--fb-orange);
+      cursor: pointer;
+      transition:
+        border-color 0.15s ease,
+        background 0.15s ease;
+    }
+    .addr-banner.is-empty:hover {
+      border-color: var(--fb-primary);
+      background: var(--fb-primary-soft);
+    }
+    /* Square "add address" button sitting beside the pickup dropdown. */
+    .addr-add {
+      flex: none;
+      width: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      border: 1.5px solid var(--fb-line);
+      background: var(--fb-bg);
+      color: var(--fb-primary-deep);
+      cursor: pointer;
+      transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+    }
+    .addr-add:hover {
+      border-color: var(--fb-primary);
+      background: var(--fb-primary-soft);
+      color: var(--fb-primary-deep);
     }
     .impact-num {
       font-size: 22px;
@@ -186,11 +254,56 @@ interface NearbyReceiver {
       color: var(--fb-primary-deep);
       line-height: 1.1;
     }
+    /* ---- Veg / Non-Veg toggle ---- */
+    .diet-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 10px 8px;
+      border-radius: 12px;
+      border: 1.5px solid var(--fb-line);
+      background: var(--fb-bg);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fb-muted);
+      cursor: pointer;
+      transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+    }
+    .diet-btn:hover {
+      border-color: var(--fb-muted);
+    }
+    /* Icon carries the diet colour even while unselected. */
+    .diet-btn.veg i {
+      color: var(--fb-success);
+    }
+    .diet-btn.nonveg i {
+      color: #e04434;
+    }
+    /* Selected → filled in the diet's colour. */
+    .diet-btn.veg.selected {
+      border-color: var(--fb-success);
+      background: var(--fb-success);
+      color: #fff;
+    }
+    .diet-btn.nonveg.selected {
+      border-color: #e04434;
+      background: #e04434;
+      color: #fff;
+    }
+    .diet-btn.selected i {
+      color: #fff;
+    }
   `,
 })
 export class CreateListing {
   private readonly listingService = inject(ListingService);
-  private readonly reportService = inject(ReportService);
+  private readonly dashboardService = inject(DashboardService);
   protected readonly pickup = inject(PickupAddressService);
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
@@ -213,6 +326,8 @@ export class CreateListing {
   /** Bound from the `?edit=<id>` query param (withComponentInputBinding). */
   readonly edit = input<string>();
   protected readonly editId = signal<string | null>(null);
+  /** Existing photo of the listing being edited — shown as the picker's preview. */
+  protected readonly editImageUrl = signal<string | null>(null);
   protected readonly submitting = signal(false);
 
   protected readonly mealOptions: FbSelectOption[] = [
@@ -236,19 +351,27 @@ export class CreateListing {
    */
   protected readonly minDeadline = appZonedNowInput();
 
-  protected readonly nearby: NearbyReceiver[] = [
-    { name: 'Hope Community Kitchen', dist: 1.2 },
-    { name: 'Sunrise Shelter', dist: 2.6 },
-    { name: 'Asha Foundation', dist: 3.4 },
-  ];
-
   private photoFile: File | null = null;
-  protected readonly impact = signal<DonorReport | null>(null);
-  protected readonly co2 = computed(() => Math.round((this.impact()?.totalMealsDonated ?? 0) * 0.45));
+  /** Consolidated donor dashboard — powers both the impact stats and the nearby recipients. */
+  protected readonly dashboard = signal<DonorDashboard | null>(null);
+  protected readonly co2 = computed(() => Math.round((this.dashboard()?.totalMealsDonated ?? 0) * 0.45));
+  /** Real recipients waiting near the chosen pickup address (from the donor dashboard). */
+  protected readonly nearbyRecipients = computed(() => this.dashboard()?.nearbyRecipients ?? []);
 
   /** Pickup address used for the listing — the edited listing's, else the top-bar selection. */
   private readonly editAddress = signal<{ label: string; latitude: number; longitude: number; } | null>(null);
   protected readonly activeAddress = computed(() => this.editAddress() ?? this.pickup.selected());
+
+  /** Dropdown of the donor's saved pickup addresses (create mode), synced with the shared selection. */
+  protected readonly pickupCtrl = new FormControl<string | null>(null);
+  protected readonly pickupOptions = computed<FbSelectOption[]>(() =>
+    this.pickup.addresses().map((a) => ({
+      value: a.id,
+      label: a.label,
+      description: a.address,
+      icon: 'fa-solid fa-location-dot',
+    })),
+  );
 
   protected readonly fieldErrors = signal<Record<string, string>>({});
 
@@ -267,9 +390,26 @@ export class CreateListing {
   });
 
   constructor() {
-    this.reportService.donor().subscribe({
-      next: (r) => this.impact.set(r),
-      error: () => undefined,
+    // Load the donor dashboard (impact stats + nearby recipients). Re-runs when the
+    // active pickup address changes, so "Waiting nearby" reflects that location.
+    effect(() => {
+      const addr = this.activeAddress();
+      this.dashboardService.donor(addr?.latitude, addr?.longitude).subscribe({
+        next: (d) => this.dashboard.set(d),
+        error: () => undefined,
+      });
+    });
+
+    // Mirror the shared pickup selection into the dropdown (topbar/profile can change it).
+    effect(() => {
+      const selectedId = this.pickup.selected()?.id ?? null;
+      this.pickupCtrl.setValue(selectedId, { emitEvent: false });
+    });
+    // Choosing an address in the dropdown makes it the active/default pickup address.
+    this.pickupCtrl.valueChanges.pipe(takeUntilDestroyed()).subscribe((id) => {
+      if (id && id !== this.pickup.selected()?.id) {
+        this.pickup.select(id).subscribe();
+      }
     });
 
     effect(() => {
@@ -290,6 +430,8 @@ export class CreateListing {
             pickupDeadline: this.toLocalInput(l.pickupDeadlineUtc),
           });
           this.editAddress.set({ label: l.pickupAddress, latitude: l.latitude, longitude: l.longitude });
+          // Show the listing's existing photo as the picker's preview.
+          this.editImageUrl.set(l.images?.[0]?.imageUrl ?? null);
         },
         error: (err: Error) =>
           this.toast.show('fa-solid fa-triangle-exclamation', err.message || 'Could not load listing'),
@@ -300,6 +442,11 @@ export class CreateListing {
   /** Leave the form without saving and return to the donations list. */
   protected back(): void {
     this.router.navigate([APP_ROUTES.appView('listings')]);
+  }
+
+  /** Jump to the Profile page, where pickup addresses are added and managed. */
+  protected addAddress(): void {
+    this.router.navigate([APP_ROUTES.appView('profile')]);
   }
 
   /**

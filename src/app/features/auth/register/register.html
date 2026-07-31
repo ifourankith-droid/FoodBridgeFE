@@ -5,7 +5,7 @@
 
   <!-- Step indicator (click a completed step to go back) -->
   <div class="flex justify-center items-center gap-2.5 mb-8">
-    @for (n of [1, 2, 3, 4]; track n) {
+    @for (n of [1, 2, 3]; track n) {
       @if (n > 1) {
         <div class="step-line"></div>
       }
@@ -59,18 +59,18 @@
       </p>
     }
 
-    <!-- Step 2: Personal info -->
+    <!-- Step 2: Address (map + address fields) -->
     @case (2) {
-      <p class="small-label mb-3">Step 2 — Personal information</p>
-      <form [formGroup]="form" class="grid grid-cols-12 gap-3" fbAutofocus>
-        <app-input
-          class="col-span-12"
-          formControlName="name"
-          placeholder="Full name / Organization name"
-          [required]="true"
-          hint="Your full name, or your organization's name."
-          [error]="err('name')"
-        />
+      <p class="small-label mb-3">Step 2 — Your address</p>
+      <app-location-picker
+        [location]="location()"
+        [error]="locationError()"
+        [autoLocate]="true"
+        buttonLabel="Use current GPS location"
+        (locationChange)="onLocationPicked($event)"
+        (addressResolved)="onAddressResolved($event)"
+      />
+      <form [formGroup]="form" class="grid grid-cols-12 gap-3">
         <app-input class="col-span-12" formControlName="address" placeholder="Address" />
         <app-input class="col-span-6" formControlName="city" placeholder="City" />
         <app-input class="col-span-3" formControlName="state" placeholder="State" />
@@ -82,37 +82,6 @@
           formControlName="pincode"
           placeholder="Pincode"
         />
-
-        @if (isRecipient()) {
-          <div class="col-span-12">
-            <label class="small-label mb-2 block">You are registering as</label>
-            <div class="flex gap-2 mb-2">
-              <button
-                type="button"
-                class="btn-fb-outline flex-1"
-                [class.selected]="recipientType() === 'Individual'"
-                (click)="setRecipientType('Individual')"
-              >
-                👤 Individual / Household
-              </button>
-              <button
-                type="button"
-                class="btn-fb-outline flex-1"
-                [class.selected]="recipientType() === 'Organization'"
-                (click)="setRecipientType('Organization')"
-              >
-                🏢 Organization / NGO
-              </button>
-            </div>
-            <app-input
-              formControlName="capacity"
-              [placeholder]="capacityPlaceholder()"
-              [required]="true"
-              hint="Helps us match the right amount of food to you."
-              [error]="err('capacity')"
-            />
-          </div>
-        }
       </form>
       <div class="flex gap-2 mt-6">
         <div class="flex-1">
@@ -123,7 +92,7 @@
             icon="fa-solid fa-arrow-right"
             iconPosition="right"
             [block]="true"
-            (clicked)="goToStep(3)"
+            (clicked)="proceedToDetails()"
           >
             Continue
           </app-button>
@@ -131,60 +100,53 @@
       </div>
     }
 
-    <!-- Step 3: Location -->
+    <!-- Step 3: Full name & number -->
     @case (3) {
-      <p class="small-label mb-3">Step 3 — Confirm your location</p>
-      <app-fb-map
-        class="block mb-3"
-        [config]="locationConfig()"
-        (locationChange)="onLocationPicked($event)"
-      />
-      @if (location(); as loc) {
-        <p class="fb-help mb-3">
-          <i class="fa-solid fa-location-dot mr-1 text-primary"></i>Pin set at
-          {{ loc.lat | number: '1.4-4' }}, {{ loc.lng | number: '1.4-4' }}
-        </p>
-      } @else if (locationError()) {
-        <p class="text-red-500 text-xs mb-3">{{ locationError() }}</p>
-      } @else {
-        <p class="fb-help mb-3">Drop a pin on the map to set your location</p>
-      }
-      <div class="mb-3">
-        <app-button
-          variant="outline"
-          icon="fa-solid fa-location-crosshairs"
-          [block]="true"
-          (clicked)="captureGps()"
-        >
-          Use current GPS location
-        </app-button>
-      </div>
-      <div class="flex gap-2">
-        <div class="flex-1">
-          <app-button variant="outline" [block]="true" (clicked)="goToStep(2)">Back</app-button>
-        </div>
-        <div class="flex-1">
-          <app-button
-            icon="fa-solid fa-arrow-right"
-            iconPosition="right"
-            [block]="true"
-            (clicked)="proceedToMobile()"
-          >
-            Continue
-          </app-button>
-        </div>
-      </div>
-    }
-
-    <!-- Step 4: Mobile → verify → create -->
-    @case (4) {
       @if (!mobileVerified()) {
-        <p class="small-label mb-3">Step 4 — Verify your mobile</p>
-        <p class="auth-subtitle">
-          Enter your mobile number and we'll send a one-time code to confirm it.
-        </p>
-        <form [formGroup]="form" fbAutofocus>
+        <p class="small-label mb-3">Step 3 — Your details</p>
+        <form [formGroup]="form" class="grid grid-cols-12 gap-3" fbAutofocus>
           <app-input
+            class="col-span-12"
+            formControlName="name"
+            placeholder="Full name / Organization name"
+            [required]="true"
+            hint="Your full name, or your organization's name."
+            [error]="err('name')"
+          />
+
+          @if (isRecipient()) {
+            <div class="col-span-12">
+              <label class="small-label mb-2 block">You are registering as</label>
+              <div class="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  class="btn-fb-outline flex-1"
+                  [class.selected]="recipientType() === 'Individual'"
+                  (click)="setRecipientType('Individual')"
+                >
+                  👤 Individual / Household
+                </button>
+                <button
+                  type="button"
+                  class="btn-fb-outline flex-1"
+                  [class.selected]="recipientType() === 'Organization'"
+                  (click)="setRecipientType('Organization')"
+                >
+                  🏢 Organization / NGO
+                </button>
+              </div>
+              <app-input
+                formControlName="capacity"
+                [placeholder]="capacityPlaceholder()"
+                [required]="true"
+                hint="Helps us match the right amount of food to you."
+                [error]="err('capacity')"
+              />
+            </div>
+          }
+
+          <app-input
+            class="col-span-12"
             type="tel"
             prefix="+91"
             prefixIcon="fa-solid fa-phone"
@@ -200,7 +162,7 @@
         </form>
         <div class="flex gap-2 mt-6">
           <div class="flex-1">
-            <app-button variant="outline" [block]="true" (clicked)="stepBack(3)">Back</app-button>
+            <app-button variant="outline" [block]="true" (clicked)="stepBack(2)">Back</app-button>
           </div>
           <div class="flex-1">
             <app-button

@@ -94,6 +94,8 @@ export interface ApiListingSummary {
   pickupDeadlineUtc: string;
   status: ApiListingStatus;
   createdAtUtc: string;
+  /** First uploaded photo, or null — used as the card thumbnail. */
+  imageUrl: string | null;
 }
 
 /** Nearby shape — GET /listings/nearby (adds distance, drops timeline/images). */

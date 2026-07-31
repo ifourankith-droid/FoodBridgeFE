@@ -1,9 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, Injector, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, Injector, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, EMPTY, tap } from 'rxjs';
 import { APP_ROUTES, fromView } from '@core/config/app-routes';
 import {
-  ApiListingStatus,
   ApiListingSummary,
   DIET_LABELS,
   DietType,
@@ -11,25 +10,38 @@ import {
   toListingStatus,
 } from '@core/models/listing-api.model';
 import { ListingStatus, STATUS_ICONS, STATUS_LABELS } from '@core/models/listing.model';
+import { DonorReport } from '@core/models/report.model';
 import { DialogService } from '@core/services/dialog.service';
 import { ListingService } from '@core/services/listing.service';
+import { ReportService } from '@core/services/report.service';
 import { ToastService } from '@core/services/toast.service';
-import { InfiniteScroll } from '@shared/directives/infinite-scroll.directive';
 import { FbButton } from '@shared/ui/button/button';
 import { openRaiseDisputeDialog } from '@shared/ui/dispute-dialog/dispute-dialog';
 import { ListingCard } from '@shared/ui/listing-card/listing-card';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
+import { FbMultiSelect, FbMultiSelectOption } from '@shared/ui/multi-select/multi-select';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 import { ListingDetailDialog } from './listing-detail-dialog';
 
-type Tab = 'all' | ListingStatus;
+/** Status order shown in the Status filter. */
+const STATUSES: readonly ListingStatus[] = [
+  'pending',
+  'claimed',
+  'pickedup',
+  'delivered',
+  'confirmed',
+  'expired',
+  'cancelled',
+  'rejected',
+];
 
-const PAGE_SIZE = 9;
+/** One page big enough to hold a donor's full history — filtering is client-side. */
+const LOAD_LIMIT = 500;
 
 @Component({
   selector: 'app-my-listings',
-  imports: [FbButton, InfiniteScroll, ListingCard, ListingGrid, PageWrapper],
+  imports: [FbButton, ListingCard, ListingGrid, FbMultiSelect, PageWrapper],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -41,319 +53,483 @@ const PAGE_SIZE = 9;
         <app-button icon="fa-solid fa-plus" (clicked)="create()">New Donation</app-button>
       </div>
 
-      <div class="flex flex-wrap gap-2 mb-3">
-        @for (t of tabs; track t) {
-          <button [class]="'tab-pill ' + tabClass(t)" (click)="setTab(t)">
-            <i [class]="tabIcon[t]"></i><span>{{ tabLabel[t] }}</span>
-          </button>
-        }
+      <div class="grid gap-4 xl:grid-cols-3 items-start">
+        <div class="xl:col-span-2">
+          <!-- Summary card (mirrors My Deliveries): lifetime totals + the filters. -->
+          <div class="card-fb p-4 mb-4">
+            <div class="flex items-center gap-3">
+              <div
+                class="stat-icon !mb-0"
+                style="background:linear-gradient(135deg,var(--fb-primary),var(--fb-primary-deep))"
+              >
+                <i class="fa-solid fa-box-open"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold">
+                  <span class="text-primary-deep text-2xl">{{ report()?.totalListings ?? 0 }}</span>
+                  {{ (report()?.totalListings ?? 0) === 1 ? 'donation' : 'donations' }} posted
+                </div>
+                <div class="text-muted text-xs mt-0.5">
+                  {{ report()?.totalMealsDonated ?? 0 }} meals donated ·
+                  {{ report()?.totalCertificates ?? 0 }} certificates earned
+                </div>
+              </div>
+            </div>
+
+            <div class="filter-row">
+              <app-multi-select
+                icon="fa-solid fa-layer-group"
+                allLabel="All statuses"
+                [options]="statusOptions"
+                [selected]="statusSel()"
+                (selectionChange)="statusSel.set($event)"
+              />
+              <app-multi-select
+                icon="fa-solid fa-leaf"
+                allLabel="Any diet"
+                [options]="dietOptions"
+                [selected]="dietSel()"
+                (selectionChange)="dietSel.set($event)"
+              />
+              <app-multi-select
+                icon="fa-solid fa-clock"
+                allLabel="Any meal"
+                [options]="mealOptions"
+                [selected]="mealSel()"
+                (selectionChange)="mealSel.set($event)"
+              />
+              @if (hasFilters()) {
+                <app-button type="button" [iconOnly]="true" variant="outline" icon="fa-solid fa-xmark" (click)="clearFilters()">
+                  Clear
+                </app-button>
+              }
+            </div>
+          </div>
+
+          <app-listing-grid
+            [loading]="loading()"
+            [empty]="!filtered().length"
+            emptyIcon="fa-solid fa-box-open"
+            gridClass="lg:grid-cols-2"
+            [emptyText]="hasFilters() ? 'No donations match these filters' : 'No donations yet'"
+          >
+            @for (l of filtered(); track l.id) {
+              <app-listing-card [listing]="l" [hasFooter]="true">
+                <div cardFooter class="footer-actions">
+                  <app-button
+                    class="btn-view"
+                    size="sm"
+                    icon="fa fa-eye"
+                    [block]="true"
+                    (clicked)="openDetail(l)"
+                  >
+                    View
+                  </app-button>
+                  <!-- Kept visible but disabled once a volunteer's involved; the wrapper
+                       carries the tooltip since a disabled button can't show its own. -->
+                  <span class="btn-edit" [title]="editHint(l)">
+                    <app-button
+                      variant="outline"
+                      size="sm"
+                      icon="fa-solid fa-pen"
+                      [block]="true"
+                      [disabled]="!canEdit(l)"
+                      (clicked)="edit(l)"
+                    >
+                      Edit
+                    </app-button>
+                  </span>
+                </div>
+              </app-listing-card>
+            }
+          </app-listing-grid>
+        </div>
+
+        <!-- Stats aside — sticky below the topbar (like the Notifications page). -->
+        <aside class="flex flex-col gap-4 xl:sticky xl:top-[84px]">
+          <!-- Status donut: how many listed, how many delivered, split by status. -->
+          <div class="card-fb p-5">
+            <div class="font-bold text-sm mb-4">Donation status</div>
+            <div class="flex items-center gap-4">
+              <div class="ring" [style.background]="donutBackground()">
+                <div class="ring-inner">
+                  <span class="ring-num">{{ totalCount() }}</span>
+                  <span class="ring-cap">listed</span>
+                </div>
+              </div>
+              <div class="min-w-0">
+                <div class="text-muted text-xs">Delivered</div>
+                <div class="font-bold text-xl text-success-deep">{{ deliveredCount() }}</div>
+                @if (totalCount()) {
+                  <div class="text-primary-deep text-xs font-semibold mt-1">
+                    {{ deliveredPct() }}% completed
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- By status — each row toggles that status in the filter. -->
+          <div class="card-fb p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="font-bold text-sm">By status</div>
+              @if (statusSel().length) {
+                <button type="button" class="fb-link text-xs" (click)="statusSel.set([])">Clear</button>
+              }
+            </div>
+            @if (totalCount()) {
+              <div class="flex flex-col gap-1">
+                @for (s of statusStats(); track s.id) {
+                  <button
+                    type="button"
+                    class="cat-row"
+                    [class.is-active]="statusSel().includes(s.id)"
+                    [attr.aria-pressed]="statusSel().includes(s.id)"
+                    (click)="toggleStatus(s.id)"
+                  >
+                    <span class="cat-icon" [style.color]="s.color">
+                      <i [class]="s.icon" aria-hidden="true"></i>
+                    </span>
+                    <span class="cat-label">{{ s.label }}</span>
+                    <span class="cat-count">{{ s.count }}</span>
+                    <span class="cat-bar" aria-hidden="true">
+                      <span class="cat-fill" [style.width.%]="s.pct" [style.background]="s.color"></span>
+                    </span>
+                  </button>
+                }
+              </div>
+            } @else {
+              <p class="text-muted text-xs m-0">Post a donation to see the breakdown.</p>
+            }
+          </div>
+
+          <!-- Impact -->
+          <div class="card-fb p-5">
+            <div class="font-bold text-sm mb-3">Your impact</div>
+            <div class="grid grid-cols-2 gap-3 text-center">
+              <div>
+                <div class="impact-num">{{ report()?.totalMealsDonated ?? 0 }}</div>
+                <div class="text-muted text-[11px]">Meals donated</div>
+              </div>
+              <div>
+                <div class="impact-num">{{ report()?.totalCertificates ?? 0 }}</div>
+                <div class="text-muted text-[11px]">Certificates</div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
-
-      <!-- Food filters, narrowed server-side alongside the status tab. -->
-      <div class="filter-bar mb-4">
-        <div class="filter-group">
-          <span class="small-label !mb-0">Diet</span>
-          @for (d of dietOptions; track d.id) {
-            <button
-              [class]="'chip' + (diet() === d.id ? ' on' : '')"
-              (click)="setDiet(d.id)"
-            >
-              {{ d.label }}
-            </button>
-          }
-        </div>
-        <div class="filter-group">
-          <span class="small-label !mb-0">Meal</span>
-          @for (m of mealOptions; track m.id) {
-            <button
-              [class]="'chip' + (meal() === m.id ? ' on' : '')"
-              (click)="setMeal(m.id)"
-            >
-              {{ m.label }}
-            </button>
-          }
-        </div>
-      </div>
-
-      <app-listing-grid
-        [loading]="loading()"
-        [empty]="!listings().length"
-        emptyIcon="fa-solid fa-box-open"
-        emptyText="No listings match these filters"
-      >
-        @for (l of listings(); track l.id) {
-          <app-listing-card [listing]="l" [clickable]="true" (cardClick)="openDetail(l)" />
-        }
-      </app-listing-grid>
-
-      @if (!loading()) {
-        <div
-          appInfiniteScroll
-          [appInfiniteScrollDisabled]="loadingMore() || done()"
-          (scrolled)="loadMore()"
-          class="py-5 text-center text-muted text-sm"
-        >
-          @if (loadingMore()) {
-            <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading more…
-          } @else if (done() && listings().length) {
-            <span class="opacity-70">You've reached the end</span>
-          }
-        </div>
-      }
-
     </app-page-wrapper>
   `,
   styles: `
-    .filter-bar {
+    .filter-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 22px;
+      align-items: flex-end;
+      gap: 12px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--fb-line);
     }
-    .filter-group {
+    .filter-row app-multi-select {
+      flex: 0 1 auto;
+      min-width: 170px;
+    }
+
+    /* ---- Card footer actions: View (wide) + Edit (remaining) ---- */
+    .footer-actions {
       display: flex;
+      gap: 8px;
+    }
+    .btn-view {
+      flex: 2 1 0;
+      min-width: 0;
+    }
+    .btn-edit {
+      flex: 1 1 0;
+      min-width: 0;
+      display: block;
+    }
+
+    /* ---- Status donut (data-driven conic gradient) ---- */
+    .ring {
+      width: 84px;
+      height: 84px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+    }
+    .ring-inner {
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      background: var(--fb-surface);
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
+      justify-content: center;
+      line-height: 1;
     }
-    .chip {
-      padding: 4px 11px;
-      border-radius: 999px;
-      border: 1px solid var(--fb-line);
-      background: transparent;
+    .ring-num {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--fb-ink);
+    }
+    .ring-cap {
+      margin-top: 2px;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: var(--fb-muted);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition:
-        color 0.15s ease,
-        border-color 0.15s ease,
-        background 0.15s ease;
     }
-    .chip:hover {
+    .impact-num {
+      font-size: 22px;
+      font-weight: 800;
       color: var(--fb-primary-deep);
-      border-color: var(--fb-primary);
+      line-height: 1.1;
     }
-    .chip.on {
-      background: var(--fb-primary);
-      border-color: var(--fb-primary);
-      color: #fff;
-    }
-    .tab-pill {
-      display: inline-flex;
+
+    /* ---- By-status breakdown rows (mirrors the notifications aside) ---- */
+    .cat-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      grid-template-areas:
+        'icon label count'
+        'icon bar   bar';
       align-items: center;
-      gap: 7px;
-      padding: 6px 16px;
-      font-size: 13.5px;
-      font-weight: 600;
-      border-radius: 999px;
-      border: 1.5px solid transparent;
+      gap: 7px 10px;
+      width: 100%;
+      padding: 8px 10px 9px;
+      border: 1px solid transparent;
+      border-radius: 12px;
       background: transparent;
+      text-align: left;
       cursor: pointer;
       transition:
         background 0.15s ease,
-        color 0.15s ease,
         border-color 0.15s ease;
     }
-    .tab-pill i {
-      font-size: 0.9em;
+    .cat-row:hover {
+      background: rgb(var(--fb-primary-rgb) / 0.07);
     }
-    /* Per-status colours (match the status badges) */
-    .t-all {
-      color: var(--fb-primary-deep);
+    .cat-row.is-active {
+      background: rgb(var(--fb-primary-rgb) / 0.11);
       border-color: var(--fb-primary);
     }
-    .t-all:hover {
-      background: var(--fb-primary-soft);
+    .cat-icon {
+      grid-area: icon;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      font-size: 12px;
+      background: color-mix(in srgb, currentColor 14%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
     }
-    .t-all.active {
-      background: var(--fb-primary);
-      border-color: var(--fb-primary);
-      color: #fff;
+    .cat-icon i {
+      color: color-mix(in srgb, currentColor 72%, #000);
     }
-    .t-pending {
-      color: #ea580c;
-      border-color: #ea580c;
+    :host-context(.dark) .cat-icon i {
+      color: color-mix(in srgb, currentColor 62%, #fff);
     }
-    .t-pending:hover {
-      background: rgba(234, 88, 12, 0.1);
+    .cat-label {
+      grid-area: label;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fb-ink);
     }
-    .t-pending.active {
-      background: #ea580c;
-      border-color: #ea580c;
-      color: #fff;
+    .cat-count {
+      grid-area: count;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--fb-muted);
+      font-variant-numeric: tabular-nums;
     }
-    .t-claimed {
-      color: #d97706;
-      border-color: #d97706;
+    .cat-bar {
+      grid-area: bar;
+      height: 4px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--fb-line);
     }
-    .t-claimed:hover {
-      background: rgba(217, 119, 6, 0.1);
+    .cat-fill {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.3s ease;
     }
-    .t-claimed.active {
-      background: #d97706;
-      border-color: #d97706;
-      color: #fff;
-    }
-    .t-delivered {
-      color: #059669;
-      border-color: #059669;
-    }
-    .t-delivered:hover {
-      background: rgba(5, 150, 105, 0.1);
-    }
-    .t-delivered.active {
-      background: #059669;
-      border-color: #059669;
-      color: #fff;
-    }
-    .t-expired {
-      color: #64748b;
-      border-color: #94a3b8;
-    }
-    .t-expired:hover {
-      background: rgba(100, 116, 139, 0.1);
-    }
-    .t-expired.active {
-      background: #64748b;
-      border-color: #64748b;
-      color: #fff;
-    }
-    .t-pickedup {
-      color: #4f46e5;
-      border-color: #6366f1;
-    }
-    .t-pickedup:hover {
-      background: rgba(79, 70, 229, 0.1);
-    }
-    .t-pickedup.active {
-      background: #4f46e5;
-      border-color: #4f46e5;
-      color: #fff;
-    }
-    .t-confirmed {
-      color: #0d9488;
-      border-color: #14b8a6;
-    }
-    .t-confirmed:hover {
-      background: rgba(13, 148, 136, 0.1);
-    }
-    .t-confirmed.active {
-      background: #0d9488;
-      border-color: #0d9488;
-      color: #fff;
-    }
-    .t-cancelled {
-      color: #dc2626;
-      border-color: #ef4444;
-    }
-    .t-cancelled:hover {
-      background: rgba(220, 38, 38, 0.1);
-    }
-    .t-cancelled.active {
-      background: #dc2626;
-      border-color: #dc2626;
-      color: #fff;
-    }
-    .t-rejected {
-      color: #e11d48;
-      border-color: #f43f5e;
-    }
-    .t-rejected:hover {
-      background: rgba(225, 29, 72, 0.1);
-    }
-    .t-rejected.active {
-      background: #e11d48;
-      border-color: #e11d48;
-      color: #fff;
+    @media (prefers-reduced-motion: reduce) {
+      .cat-row,
+      .cat-fill {
+        transition: none;
+      }
     }
   `,
 })
 export class MyListings {
   private readonly listingService = inject(ListingService);
+  private readonly reportService = inject(ReportService);
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
 
-  protected readonly tabs: Tab[] = [
-    'all',
-    'pending',
-    'claimed',
-    'pickedup',
-    'delivered',
-    'confirmed',
-    'expired',
-    'cancelled',
-    'rejected',
+  /** Lifetime donor totals for the summary card. */
+  protected readonly report = signal<DonorReport | null>(null);
+
+  // ---- Filter options (icons per value) ----
+  protected readonly statusOptions: FbMultiSelectOption[] = STATUSES.map((s) => ({
+    value: s,
+    label: STATUS_LABELS[s],
+    icon: STATUS_ICONS[s],
+  }));
+  protected readonly dietOptions: FbMultiSelectOption[] = [
+    { value: 'Veg', label: DIET_LABELS.Veg, icon: 'fa-solid fa-leaf' },
+    { value: 'NonVeg', label: DIET_LABELS.NonVeg, icon: 'fa-solid fa-drumstick-bite' },
   ];
-  protected readonly tab = signal<Tab>('all');
+  protected readonly mealOptions: FbMultiSelectOption[] = [
+    { value: 'Breakfast', label: 'Breakfast', icon: 'fa-solid fa-mug-saucer' },
+    { value: 'Lunch', label: 'Lunch', icon: 'fa-solid fa-bowl-food' },
+    { value: 'Dinner', label: 'Dinner', icon: 'fa-solid fa-utensils' },
+    { value: 'Snacks', label: 'Snacks', icon: 'fa-solid fa-cookie-bite' },
+  ];
 
-  /** Icon per tab (colour handled by the `.t-*` component styles). */
-  protected readonly tabIcon: Record<Tab, string> = {
-    all: 'fa-solid fa-layer-group',
-    ...STATUS_ICONS,
+  // ---- Selected filter values (empty = no filter) ----
+  protected readonly statusSel = signal<string[]>([]);
+  protected readonly dietSel = signal<string[]>([]);
+  protected readonly mealSel = signal<string[]>([]);
+
+  protected readonly hasFilters = computed(
+    () => !!(this.statusSel().length || this.dietSel().length || this.mealSel().length),
+  );
+
+  private readonly allListings = signal<ApiListingSummary[]>([]);
+  protected readonly loading = signal(true);
+
+  /** Accent per status — shared by the donut segments and the breakdown rows. */
+  private readonly STATUS_COLOR: Record<ListingStatus, string> = {
+    pending: '#ea580c',
+    claimed: '#d97706',
+    pickedup: '#4f46e5',
+    delivered: '#059669',
+    confirmed: '#0d9488',
+    expired: '#64748b',
+    cancelled: '#dc2626',
+    rejected: '#e11d48',
   };
 
-  /** Label per tab. */
-  protected readonly tabLabel: Record<Tab, string> = {
-    all: 'All',
-    ...STATUS_LABELS,
-  };
+  /** Total listings loaded (basis for the donut + shares). */
+  protected readonly totalCount = computed(() => this.allListings().length);
 
-  protected tabClass(t: Tab): string {
-    return `t-${t}${this.tab() === t ? ' active' : ''}`;
+  /** Per-status counts with colour/icon + share-of-total, non-empty statuses only. */
+  protected readonly statusStats = computed(() => {
+    const rows = this.allListings();
+    const total = rows.length || 1;
+    const counts = {} as Record<ListingStatus, number>;
+    for (const l of rows) {
+      const s = toListingStatus(l.status);
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    return STATUSES.map((s) => ({
+      id: s,
+      label: STATUS_LABELS[s],
+      icon: STATUS_ICONS[s],
+      color: this.STATUS_COLOR[s],
+      count: counts[s] ?? 0,
+      pct: Math.round(((counts[s] ?? 0) / total) * 100),
+    })).filter((row) => row.count > 0);
+  });
+
+  /** Delivered + confirmed = the food actually reached someone. */
+  protected readonly deliveredCount = computed(
+    () =>
+      this.allListings().filter((l) => {
+        const s = toListingStatus(l.status);
+        return s === 'delivered' || s === 'confirmed';
+      }).length,
+  );
+
+  protected readonly deliveredPct = computed(() => {
+    const total = this.totalCount();
+    return total ? Math.round((this.deliveredCount() / total) * 100) : 0;
+  });
+
+  /** Multi-segment conic gradient for the status donut. */
+  protected readonly donutBackground = computed(() => {
+    const total = this.totalCount();
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    let acc = 0;
+    const segments = this.statusStats().map((s) => {
+      const start = (acc / total) * 100;
+      acc += s.count;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
+
+  /** Toggle a status in the filter (from a breakdown row). */
+  protected toggleStatus(id: string): void {
+    const set = new Set(this.statusSel());
+    if (set.has(id)) {
+      set.delete(id);
+    } else {
+      set.add(id);
+    }
+    this.statusSel.set([...set]);
   }
 
-  protected readonly listings = signal<ApiListingSummary[]>([]);
-  protected readonly loading = signal(true);
-  protected readonly loadingMore = signal(false);
-  protected readonly done = signal(false);
-
-  private page = 1;
-
-  // ---- Food filters (server-side, like the volunteer's Nearby feed) ----
-  protected readonly dietOptions: readonly { id: DietType | 'all'; label: string }[] = [
-    { id: 'all', label: 'Any' },
-    { id: 'Veg', label: DIET_LABELS.Veg },
-    { id: 'NonVeg', label: DIET_LABELS.NonVeg },
-  ];
-  protected readonly mealOptions: readonly { id: MealType | 'all'; label: string }[] = [
-    { id: 'all', label: 'Any' },
-    { id: 'Breakfast', label: 'Breakfast' },
-    { id: 'Lunch', label: 'Lunch' },
-    { id: 'Dinner', label: 'Dinner' },
-    { id: 'Snacks', label: 'Snacks' },
-  ];
-  protected readonly diet = signal<DietType | 'all'>('all');
-  protected readonly meal = signal<MealType | 'all'>('all');
+  /** The donor's listings narrowed by the three multi-select filters (client-side). */
+  protected readonly filtered = computed<ApiListingSummary[]>(() => {
+    const statuses = new Set(this.statusSel());
+    const diets = new Set(this.dietSel());
+    const meals = new Set(this.mealSel());
+    return this.allListings().filter((l) => {
+      if (statuses.size && !statuses.has(toListingStatus(l.status))) {
+        return false;
+      }
+      if (diets.size && (!l.dietType || !diets.has(l.dietType))) {
+        return false;
+      }
+      if (meals.size && (!l.mealType || !meals.has(l.mealType))) {
+        return false;
+      }
+      return true;
+    });
+  });
 
   constructor() {
-    this.loadInitial();
+    this.load();
+    this.reportService.donor().subscribe({
+      next: (r) => this.report.set(r),
+      error: () => undefined,
+    });
   }
 
-  protected setTab(t: Tab): void {
-    if (this.tab() !== t) {
-      this.tab.set(t);
-      this.loadInitial();
-    }
-  }
-
-  protected setDiet(d: DietType | 'all'): void {
-    if (this.diet() !== d) {
-      this.diet.set(d);
-      this.loadInitial();
-    }
-  }
-
-  protected setMeal(m: MealType | 'all'): void {
-    if (this.meal() !== m) {
-      this.meal.set(m);
-      this.loadInitial();
-    }
+  protected clearFilters(): void {
+    this.statusSel.set([]);
+    this.dietSel.set([]);
+    this.mealSel.set([]);
   }
 
   protected statusOf(l: ApiListingSummary): ListingStatus {
     return toListingStatus(l.status);
+  }
+
+  /** Editing is only allowed while a listing is still Pending (backend enforces this too). */
+  protected canEdit(l: ApiListingSummary): boolean {
+    return this.statusOf(l) === 'pending';
+  }
+
+  /** Tooltip shown on the disabled Edit button explaining why it can't be edited. */
+  protected editHint(l: ApiListingSummary): string {
+    return this.canEdit(l) ? '' : 'Only pending donations can be edited';
   }
 
   /**
@@ -372,46 +548,46 @@ export class MyListings {
       size: 'lg',
       actions: isPending
         ? [
-            {
-              id: 'cancel-listing',
-              label: 'Cancel donation',
-              icon: 'fa-solid fa-ban',
-              variant: 'danger',
-              align: 'start',
-              handler: (ref) => this.cancelListing(l, ref),
+          {
+            id: 'cancel-listing',
+            label: 'Cancel donation',
+            icon: 'fa-solid fa-ban',
+            variant: 'danger',
+            align: 'start',
+            handler: (ref) => this.cancelListing(l, ref),
+          },
+          {
+            id: 'edit',
+            label: 'Edit',
+            icon: 'fa-solid fa-pen',
+            variant: 'outline',
+            handler: (ref) => {
+              ref.close();
+              this.edit(l);
             },
-            {
-              id: 'edit',
-              label: 'Edit',
-              icon: 'fa-solid fa-pen',
-              variant: 'outline',
-              handler: (ref) => {
-                ref.close();
-                this.edit(l);
-              },
-            },
-            { id: 'close', label: 'Close', variant: 'ghost', close: true },
-          ]
+          },
+          { id: 'close', label: 'Close', variant: 'ghost', close: true },
+        ]
         : [
-            // Only once someone else is involved: a Pending listing has no other
-            // party to dispute with, and the backend rejects it anyway.
-            ...(this.canDispute(l)
-              ? [
-                  {
-                    id: 'dispute',
-                    label: 'Report an issue',
-                    icon: 'fa-solid fa-triangle-exclamation',
-                    variant: 'outline' as const,
-                    align: 'start' as const,
-                    handler: (ref: DialogRef<void, ListingDetailDialog>) => {
-                      ref.close();
-                      this.reportIssue(l);
-                    },
-                  },
-                ]
-              : []),
-            { id: 'close', label: 'Close', variant: 'ghost', close: true },
-          ],
+          // Only once someone else is involved: a Pending listing has no other
+          // party to dispute with, and the backend rejects it anyway.
+          ...(this.canDispute(l)
+            ? [
+              {
+                id: 'dispute',
+                label: 'Report an issue',
+                icon: 'fa-solid fa-triangle-exclamation',
+                variant: 'outline' as const,
+                align: 'start' as const,
+                handler: (ref: DialogRef<void, ListingDetailDialog>) => {
+                  ref.close();
+                  this.reportIssue(l);
+                },
+              },
+            ]
+            : []),
+          { id: 'close', label: 'Close', variant: 'ghost', close: true },
+        ],
     });
   }
 
@@ -437,7 +613,7 @@ export class MyListings {
     this.router.navigate([APP_ROUTES.appView('create')], fromView('listings'));
   }
 
-  private edit(l: ApiListingSummary): void {
+  protected edit(l: ApiListingSummary): void {
     this.router.navigate([APP_ROUTES.appView('create')], {
       queryParams: { edit: l.id },
       ...fromView('listings'),
@@ -471,7 +647,7 @@ export class MyListings {
           tap(() => {
             ref.close();
             this.toast.show('fa-solid fa-ban', 'Listing cancelled');
-            this.loadInitial();
+            this.load();
           }),
           catchError((err: Error) => {
             this.toast.show(
@@ -485,31 +661,12 @@ export class MyListings {
     });
   }
 
-  protected loadMore(): void {
-    if (this.loading() || this.loadingMore() || this.done()) {
-      return;
-    }
-    this.loadingMore.set(true);
-    this.fetch(this.page).subscribe({
-      next: (rows) => {
-        this.listings.update((cur) => [...cur, ...rows]);
-        this.page++;
-        this.done.set(rows.length < PAGE_SIZE);
-        this.loadingMore.set(false);
-      },
-      error: () => this.loadingMore.set(false),
-    });
-  }
-
-  private loadInitial(): void {
-    this.page = 1;
-    this.done.set(false);
+  /** Load the donor's full listing history once; the multi-selects filter it client-side. */
+  private load(): void {
     this.loading.set(true);
-    this.fetch(this.page).subscribe({
+    this.listingService.listMine(undefined, 1, LOAD_LIMIT).subscribe({
       next: (rows) => {
-        this.listings.set(rows);
-        this.page++;
-        this.done.set(rows.length < PAGE_SIZE);
+        this.allListings.set(rows);
         this.loading.set(false);
       },
       error: (err: Error) => {
@@ -518,34 +675,4 @@ export class MyListings {
       },
     });
   }
-
-  /**
-   * Every filter goes to the server. The status tab used to filter the *loaded*
-   * page client-side, which quietly meant a tab only ever searched the rows already
-   * scrolled into view — with paging that under-reports.
-   */
-  private fetch(page: number) {
-    const tab = this.tab();
-    return this.listingService.listMine(
-      tab === 'all' ? undefined : TAB_TO_API_STATUS[tab],
-      page,
-      PAGE_SIZE,
-      {
-        dietType: this.diet() === 'all' ? undefined : (this.diet() as DietType),
-        mealType: this.meal() === 'all' ? undefined : (this.meal() as MealType),
-      },
-    );
-  }
 }
-
-/** App lowercase status → the backend enum name `GET /listings?status=` expects. */
-const TAB_TO_API_STATUS: Record<ListingStatus, ApiListingStatus> = {
-  pending: 'Pending',
-  claimed: 'Claimed',
-  pickedup: 'PickedUp',
-  delivered: 'Delivered',
-  confirmed: 'Confirmed',
-  expired: 'Expired',
-  cancelled: 'Cancelled',
-  rejected: 'Rejected',
-};

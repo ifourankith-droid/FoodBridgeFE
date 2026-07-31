@@ -50,6 +50,36 @@
   flex-shrink: 0;
 }
 
+/* Photo thumbnail shown in place of the icon; click opens the image viewer. */
+.lc-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--fb-line);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--fb-bg);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lc-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.lc-thumb:hover {
+  transform: scale(1.04);
+  box-shadow: var(--fb-shadow);
+}
+.lc-thumb:focus-visible {
+  outline: none;
+  box-shadow: var(--fb-ring);
+}
+
 .lc-title {
   min-width: 0;
 }

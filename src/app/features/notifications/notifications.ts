@@ -136,7 +136,7 @@ function isCategory(id: NotificationFilter): id is NotificationCategory {
           }
         </div>
 
-        <aside class="flex flex-col gap-4 xl:sticky xl:top-4">
+        <aside class="flex flex-col gap-4 xl:sticky xl:top-[84px]">
           <!-- Read progress -->
           <div class="card-fb p-5">
             <div class="flex items-center gap-4">

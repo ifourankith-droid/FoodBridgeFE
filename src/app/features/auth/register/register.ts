@@ -1,21 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AuthService } from '@core/services/auth.service';
-import { GeocodingService } from '@core/services/geocoding.service';
-import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
-import { LocationPermissionService } from '@core/services/location-permission.service';
+import type { GeoAddress } from '@core/services/geocoding.service';
 import { ToastService } from '@core/services/toast.service';
 import { RecipientType, RegistrationDraft } from '@core/models/registration.model';
 import { Role } from '@core/models/user.model';
 import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput } from '@shared/ui/input/input';
-import { FbMap } from '@shared/ui/map/fb-map';
-import { FbLatLng, FbMapConfig } from '@shared/ui/map/fb-map.model';
+import { LocationPicker } from '@shared/ui/location-picker/location-picker';
+import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { SuccessAnim } from '@shared/ui/success-anim/success-anim';
 import { environment } from '@env/environment';
 
@@ -27,15 +24,12 @@ interface RoleOption {
 
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, DecimalPipe, FbMap, FbInput, FbButton, SuccessAnim, FbAutofocus],
+  imports: [ReactiveFormsModule, FbInput, FbButton, SuccessAnim, FbAutofocus, LocationPicker],
   templateUrl: './register.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Register {
   private readonly auth = inject(AuthService);
-  private readonly geocoding = inject(GeocodingService);
-  private readonly geolocation = inject(GeolocationService);
-  private readonly locationPermission = inject(LocationPermissionService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
@@ -71,15 +65,6 @@ export class Register {
 
   /** Location chosen on the map (null until the user picks / uses GPS). */
   protected readonly location = signal<FbLatLng | null>(null);
-
-  protected readonly locationConfig = computed<FbMapConfig>(() => ({
-    mode: 'picker',
-    height: 240,
-    zoom: 15,
-    initialLocation: this.location() ?? environment.mapDefaultCenter,
-    clickToPlace: true,
-    placeholderText: 'Confirm your location',
-  }));
 
   protected readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(/\S/)] }),
@@ -118,10 +103,10 @@ export class Register {
     const draft = this.auth.registrationDraft();
     if (draft) {
       this.restore(draft);
-      // Verified, or reached the mobile step (location set) → resume at step 4; else step 2.
-      const reachedMobileStep =
+      // Verified, or reached the details step (address done) → resume at step 3; else step 2.
+      const reachedDetailsStep =
         this.auth.mobileVerified() || (draft.latitude !== null && draft.longitude !== null);
-      this.step.set(reachedMobileStep ? 4 : 2);
+      this.step.set(reachedDetailsStep ? 3 : 2);
     }
 
     // Capacity is required only for recipients — toggle its validators with the role.
@@ -149,11 +134,6 @@ export class Register {
         this.refreshErrors(this.validating());
       }
     });
-
-    // Entering the page → ask for location permission and pre-fill the address (silent on failure).
-    if (!this.location()) {
-      this.captureGps(true);
-    }
   }
 
   protected goToLogin(): void {
@@ -180,15 +160,11 @@ export class Register {
       this.toast.show('fa-solid fa-triangle-exclamation', 'Please choose a role first');
       return;
     }
-    // Leaving step 2 → validate the personal details.
-    if (step === 3 && !this.validateStep2()) {
-      return;
-    }
     this.step.set(step);
   }
 
-  /** Step 3 → 4: needs a pinned location (backend requires lat/lng). */
-  protected proceedToMobile(): void {
+  /** Step 2 → 3: needs a pinned location (backend requires lat/lng). */
+  protected proceedToDetails(): void {
     if (!this.location()) {
       this.locationError.set('Drop a pin on the map to set your location');
       this.toast.show('fa-solid fa-triangle-exclamation', 'Drop a pin on the map to set your location');
@@ -196,16 +172,18 @@ export class Register {
     }
     this.locationError.set('');
     this.persistDraft();
-    this.step.set(4);
+    this.step.set(3);
   }
 
-  /** Step 4 → OTP: validate the mobile, then send the code and go to the verify screen. */
+  /** Step 3 → OTP: validate name (+ capacity) and mobile, then send the code and verify. */
   protected sendCode(): void {
-    this.validating.set(['mobile']);
-    this.form.controls.mobile.markAsTouched();
-    this.refreshErrors(['mobile']);
-    if (this.form.controls.mobile.invalid) {
-      this.toast.show('fa-solid fa-triangle-exclamation', this.controlError('mobile'));
+    const fields = this.isRecipient() ? ['name', 'capacity', 'mobile'] : ['name', 'mobile'];
+    this.validating.set(fields);
+    fields.forEach((f) => this.form.get(f)?.markAsTouched());
+    this.refreshErrors(fields);
+    const firstError = this.firstError(fields);
+    if (firstError) {
+      this.toast.show('fa-solid fa-triangle-exclamation', firstError);
       return;
     }
 
@@ -234,69 +212,18 @@ export class Register {
   protected onLocationPicked(pos: FbLatLng): void {
     this.location.set(pos);
     this.locationError.set('');
+    this.persistDraft();
   }
 
-  /**
-   * Capture the device location. `auto` (page-load attempt) stays silent on
-   * failure; the explicit button press surfaces success/failure toasts.
-   */
-  protected captureGps(auto = false): void {
-    if (!this.geolocation.supported) {
-      if (!auto) {
-        this.toast.warning('Geolocation is not supported on this device.');
-      }
-      return;
-    }
-    // Route through GeolocationService — its desktop-friendly options (no
-    // high-accuracy GPS wait, cached fix allowed, generous timeout) resolve
-    // reliably where a raw high-accuracy getCurrentPosition would time out.
-    this.geolocation.current().subscribe({
-      next: (loc) => {
-        // Feed the fix to the map so the picker pin recentres on it, then
-        // reverse-geocode to fill the address fields.
-        this.location.set(loc);
-        this.locationError.set('');
-        this.fillAddressFromCoords(loc, auto);
-      },
-      error: (err: GeolocationError) => {
-        // The page-load attempt stays silent; only the explicit button surfaces UI.
-        if (auto) {
-          return;
-        }
-        if (err.denied) {
-          // Blocked → same "Turn on location" modal the go-active flow uses, and
-          // re-capture if the user enables it and hits "Try again".
-          this.locationPermission.prompt('Turn on location to autofill your address').then((retry) => {
-            if (retry) {
-              this.captureGps();
-            }
-          });
-        } else {
-          this.toast.warning('Could not read your location — drop a pin on the map instead.');
-        }
-      },
+  /** Address fields filled from the picker's reverse-geocode of the chosen point. */
+  protected onAddressResolved(a: GeoAddress): void {
+    this.form.patchValue({
+      address: a.address || this.form.controls.address.value,
+      city: a.city || this.form.controls.city.value,
+      state: a.state || this.form.controls.state.value,
+      pincode: a.pincode || this.form.controls.pincode.value,
     });
-  }
-
-  /** Reverse-geocode the coordinates and pre-fill the address fields (sent to the backend on register). */
-  private fillAddressFromCoords(loc: FbLatLng, auto: boolean): void {
-    this.geocoding.reverseGeocode(loc.lat, loc.lng).subscribe({
-      next: (a) => {
-        this.form.patchValue({
-          address: a.address || this.form.controls.address.value,
-          city: a.city || this.form.controls.city.value,
-          state: a.state || this.form.controls.state.value,
-          pincode: a.pincode || this.form.controls.pincode.value,
-        });
-        this.persistDraft();
-        this.toast.success('Location captured — address details filled in.');
-      },
-      error: () => {
-        if (!auto) {
-          this.toast.success('Location captured from your device.');
-        }
-      },
-    });
+    this.persistDraft();
   }
 
   protected finish(): void {
@@ -332,20 +259,6 @@ export class Register {
       error: (err: Error) =>
         this.toast.show('fa-solid fa-triangle-exclamation', err.message || 'Could not resend the code'),
     });
-  }
-
-  /** Validate step 2 controls, surface inline errors + a toast, and report validity. */
-  private validateStep2(): boolean {
-    const names = this.isRecipient() ? ['name', 'capacity'] : ['name'];
-    this.validating.set(names);
-    names.forEach((n) => this.form.get(n)?.markAsTouched());
-    this.refreshErrors(names);
-    const first = this.firstError(names);
-    if (first) {
-      this.toast.show('fa-solid fa-triangle-exclamation', first);
-      return false;
-    }
-    return true;
   }
 
   /** Message for an invalid control, derived from its Angular error state. */

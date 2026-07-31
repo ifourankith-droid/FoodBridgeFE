@@ -1,3 +1,4 @@
+import { NgClass } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -5,9 +6,7 @@ import { catchError, EMPTY, tap } from 'rxjs';
 import { AuthService } from '@core/services/auth.service';
 import { AvailabilityService } from '@core/services/availability.service';
 import { DialogService } from '@core/services/dialog.service';
-import { GeocodingService } from '@core/services/geocoding.service';
-import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
-import { LocationPermissionService } from '@core/services/location-permission.service';
+import type { GeoAddress } from '@core/services/geocoding.service';
 import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
 import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
@@ -17,11 +16,10 @@ import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput } from '@shared/ui/input/input';
 import { openPhotoDialog } from '@shared/ui/image-picker/photo-dialog';
-import { FbMap } from '@shared/ui/map/fb-map';
-import { FbLatLng, FbMapConfig } from '@shared/ui/map/fb-map.model';
+import { LocationPicker } from '@shared/ui/location-picker/location-picker';
+import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { RoleBadge } from '@shared/ui/role-badge/role-badge';
 import { Avatar } from '@shared/ui/avatar/avatar';
-import { environment } from '@env/environment';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 
 /** Address-form controls that carry validation, in display order. */
@@ -29,7 +27,7 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, FbInput, FbButton, RoleBadge, Avatar, FbMap, AvailabilityToggle, PageWrapper, FbAutofocus],
+  imports: [NgClass, ReactiveFormsModule, FbInput, FbButton, RoleBadge, Avatar, LocationPicker, AvailabilityToggle, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -41,8 +39,11 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
           <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading your profile…
         </div>
       } @else if (profile(); as u) {
-        <div class="grid gap-4 lg:grid-cols-2">
-          <form [formGroup]="form" class="card-fb p-5 max-w-xl">
+        <div
+          class="grid gap-4 items-start"
+          [ngClass]="isDonor() ? 'lg:grid-cols-2 max-w-5xl' : 'max-w-xl'"
+        >
+          <form [formGroup]="form" class="card-fb p-5">
           <!-- Identity block. The name gets its own line so a long org name can
                never collide with the status badge, and the meta row below keeps
                role / city / status on one baseline. -->
@@ -62,12 +63,12 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
                     <i [class]="s.icon" aria-hidden="true"></i>{{ u.accountStatus }}
                   </span>
                 }
-                @if (u.city) {
-                  <span class="id-city">
-                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>{{ u.city }}
-                  </span>
-                }
               </div>
+              @if (fullAddress(); as addr) {
+                <p class="id-address">
+                  <i class="fa-solid fa-location-dot" aria-hidden="true"></i>{{ addr }}
+                </p>
+              }
             </div>
           </div>
 
@@ -76,9 +77,9 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
           }
 
           <div class="grid sm:grid-cols-2 gap-3">
-            <app-input label="Mobile" prefix="+91" prefixIcon="fa-solid fa-phone" formControlName="mobile" />
-            <app-input label="City" formControlName="city" />
+            <app-input class="sm:col-span-2" label="Mobile" prefix="+91" prefixIcon="fa-solid fa-phone" formControlName="mobile" />
             <app-input class="sm:col-span-2" label="Full Name" formControlName="name" />
+            <app-input class="sm:col-span-2" label="City" formControlName="city" />
             <app-input class="sm:col-span-2" label="Address" formControlName="address" />
             @if (isRecipient()) {
               <app-input label="Recipient Type" formControlName="recipientType" />
@@ -97,7 +98,7 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
         </form>
 
         @if (isDonor()) {
-          <div class="card-fb p-5 max-w-xl">
+          <div class="card-fb p-5">
             <div class="card-head">
               <div class="card-head-title">
                 <span class="card-head-icon">
@@ -175,12 +176,14 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
             @if (addOpen()) {
               <div class="mt-4 pt-4 border-t border-line">
                 <div class="small-label mb-2">{{ editingId() ? 'Edit address' : 'New address' }} — pin the pickup location</div>
-                <app-fb-map class="block mb-3" [config]="addMapConfig()" (locationChange)="onAddLocation($event)" />
-                <div class="mb-3">
-                  <app-button variant="outline" icon="fa-solid fa-location-crosshairs" [block]="true" [loading]="geoBusy()" (clicked)="captureGps()">
-                    Use current location
-                  </app-button>
-                </div>
+                <app-location-picker
+                  [location]="addLocation()"
+                  [height]="200"
+                  placeholderText="Pin the pickup location"
+                  emptyHint="Drop a pin or use your current location."
+                  (locationChange)="onAddLocation($event)"
+                  (addressResolved)="onAddressResolved($event)"
+                />
                 <form [formGroup]="addrForm" class="grid sm:grid-cols-2 gap-3" fbAutofocus>
                   <app-input class="sm:col-span-2" label="Label" formControlName="label" placeholder="e.g. Home, Main Branch" [required]="true" [maxlength]="100" hint="A short name to recognise this location." [error]="addrErr('label')" />
                   <app-input class="sm:col-span-2" label="Address" formControlName="address" placeholder="e.g. C.G. Road, Navrangpura" [required]="true" [maxlength]="500" hint="Drop a pin or use GPS to auto-fill." [error]="addrErr('address')" />
@@ -287,6 +290,20 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
       gap: 5px;
       font-size: 12.5px;
       color: var(--fb-muted);
+    }
+    /* Complete address (street + city) shown under the identity meta row. */
+    .id-address {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 7px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--fb-muted);
+    }
+    .id-address i {
+      margin-top: 3px;
+      flex-shrink: 0;
     }
 
     /* ---- Account status badge ----
@@ -429,18 +446,26 @@ export class Profile {
   private readonly dialog = inject(DialogService);
   protected readonly pickup = inject(PickupAddressService);
   protected readonly availability = inject(AvailabilityService);
-  private readonly geocoding = inject(GeocodingService);
-  private readonly geolocation = inject(GeolocationService);
-  private readonly locationPermission = inject(LocationPermissionService);
 
   protected readonly profile = signal<UserProfile | null>(null);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
 
+  /** Street + city joined into one line for the identity header. */
+  protected readonly fullAddress = computed(() => {
+    const u = this.profile();
+    if (!u) {
+      return '';
+    }
+    return [u.address, u.city]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(', ');
+  });
+
   // ---- Pickup address management (donors) ----
   protected readonly isDonor = computed(() => this.profile()?.role?.toLowerCase() === 'donor');
   protected readonly addOpen = signal(false);
-  protected readonly geoBusy = signal(false);
   protected readonly savingAddr = signal(false);
   protected readonly addLocation = signal<FbLatLng | null>(null);
   protected readonly editingId = signal<string | null>(null);
@@ -461,15 +486,6 @@ export class Profile {
     }
     return `${n} saved · used when posting a donation`;
   });
-
-  protected readonly addMapConfig = computed<FbMapConfig>(() => ({
-    mode: 'picker',
-    height: 200,
-    zoom: 15,
-    initialLocation: this.addLocation() ?? environment.mapDefaultCenter,
-    clickToPlace: true,
-    placeholderText: 'Pin the pickup location',
-  }));
 
   protected readonly addrForm = new FormGroup({
     label: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(100)] }),
@@ -607,60 +623,14 @@ export class Profile {
 
   protected onAddLocation(pos: FbLatLng): void {
     this.addLocation.set(pos);
-    this.reverseFill(pos, false);
   }
 
-  protected captureGps(): void {
-    if (!this.geolocation.supported) {
-      this.toast.warning('Geolocation is not supported on this device.');
-      return;
-    }
-    this.geoBusy.set(true);
-    // Route through GeolocationService — its desktop-friendly options (no
-    // high-accuracy GPS wait, cached fix allowed, generous timeout) resolve
-    // reliably where a raw high-accuracy getCurrentPosition would time out.
-    this.geolocation.current().subscribe({
-      next: (loc) => {
-        // Feed the fix to the map so the picker pin recentres on it, then
-        // reverse-geocode to fill the address fields (clears geoBusy).
-        this.addLocation.set(loc);
-        this.reverseFill(loc, true);
-      },
-      error: (err: GeolocationError) => {
-        this.geoBusy.set(false);
-        if (err.denied) {
-          // Blocked → same "Turn on location" modal the go-active flow uses, and
-          // re-capture if the user enables it and hits "Try again".
-          this.locationPermission.prompt('Turn on location to autofill your address').then((retry) => {
-            if (retry) {
-              this.captureGps();
-            }
-          });
-        } else {
-          this.toast.warning('Could not read your location — drop a pin on the map instead.');
-        }
-      },
-    });
-  }
-
-  /** Reverse-geocode the pinned point to auto-fill the address fields. */
-  private reverseFill(loc: FbLatLng, fromGps: boolean): void {
-    this.geocoding.reverseGeocode(loc.lat, loc.lng).subscribe({
-      next: (a) => {
-        if (fromGps) {
-          this.geoBusy.set(false);
-        }
-        this.addrForm.patchValue({
-          address: a.address || this.addrForm.controls.address.value,
-          city: a.city || this.addrForm.controls.city.value,
-          pincode: a.pincode || this.addrForm.controls.pincode.value,
-        });
-      },
-      error: () => {
-        if (fromGps) {
-          this.geoBusy.set(false);
-        }
-      },
+  /** Address fields filled from the picker's reverse-geocode of the chosen point. */
+  protected onAddressResolved(a: GeoAddress): void {
+    this.addrForm.patchValue({
+      address: a.address || this.addrForm.controls.address.value,
+      city: a.city || this.addrForm.controls.city.value,
+      pincode: a.pincode || this.addrForm.controls.pincode.value,
     });
   }
 

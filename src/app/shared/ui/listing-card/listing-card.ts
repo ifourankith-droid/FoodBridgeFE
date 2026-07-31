@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import {
   ApiListingStatus,
   DietType,
@@ -7,7 +7,9 @@ import {
   toListingStatus,
 } from '@core/models/listing-api.model';
 import { ListingStatus } from '@core/models/listing.model';
+import { DialogService } from '@core/services/dialog.service';
 import { DeadlineMeter } from '@shared/ui/deadline-meter/deadline-meter';
+import { openImageDialog } from '@shared/ui/image-viewer/image-viewer-dialog';
 import { Pill } from '@shared/ui/pill/pill';
 import { StatusBadge } from '@shared/ui/status-badge/status-badge';
 
@@ -23,6 +25,8 @@ export interface ListingCardData {
   status: ApiListingStatus;
   /** Start of the pickup window; the deadline meter falls back to deadline − 6h without it. */
   createdAtUtc?: string;
+  /** Optional thumbnail — when present the card shows it in place of the icon. */
+  imageUrl?: string | null;
 }
 
 /**
@@ -60,11 +64,30 @@ export class ListingCard {
 
   readonly cardClick = output<void>();
 
+  private readonly dialog = inject(DialogService);
+
   protected readonly status = computed<ListingStatus>(() => toListingStatus(this.listing().status));
+
+  /** Broken image URLs fall back to the icon. */
+  private readonly imageFailed = signal(false);
+  protected readonly showImage = computed(() => !!this.listing().imageUrl && !this.imageFailed());
 
   protected onClick(): void {
     if (this.clickable()) {
       this.cardClick.emit();
     }
+  }
+
+  /** Open the shared image viewer (item name as the heading). Stops the card click. */
+  protected openImage(event: Event): void {
+    event.stopPropagation();
+    const url = this.listing().imageUrl;
+    if (url) {
+      openImageDialog(this.dialog, { title: this.listing().title, imageUrl: url });
+    }
+  }
+
+  protected onImageError(): void {
+    this.imageFailed.set(true);
   }
 }

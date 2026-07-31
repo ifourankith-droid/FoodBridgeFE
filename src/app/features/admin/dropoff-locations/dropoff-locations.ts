@@ -1,18 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { environment } from '@env/environment';
 import { DropOffLocation } from '@core/models/dropoff-location.model';
 import { DropOffLocationService } from '@core/services/dropoff-location.service';
-import { GeocodingService } from '@core/services/geocoding.service';
-import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
-import { LocationPermissionService } from '@core/services/location-permission.service';
+import type { GeoAddress } from '@core/services/geocoding.service';
 import { ToastService } from '@core/services/toast.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbInput } from '@shared/ui/input/input';
-import { FbMap } from '@shared/ui/map/fb-map';
-import { FbLatLng, FbMapConfig } from '@shared/ui/map/fb-map.model';
+import { LocationPicker } from '@shared/ui/location-picker/location-picker';
+import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 
 /**
@@ -26,7 +23,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
  */
 @Component({
   selector: 'app-dropoff-locations',
-  imports: [ReactiveFormsModule, FbButton, FbInput, FbMap, EmptyState, PageWrapper, FbAutofocus],
+  imports: [ReactiveFormsModule, FbButton, FbInput, LocationPicker, EmptyState, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -65,25 +62,14 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
           <div class="grid gap-4 lg:grid-cols-2 items-start">
             <div>
               <div class="small-label mb-2">Pin the location</div>
-              <app-fb-map class="block mb-3" [config]="mapConfig()" (locationChange)="onPin($event)" />
-              <app-button
-                variant="outline"
-                icon="fa-solid fa-location-crosshairs"
-                [block]="true"
-                [loading]="geoBusy()"
-                (clicked)="captureGps()"
-              >
-                Use current location
-              </app-button>
-              @if (pin(); as p) {
-                <p class="coords">
-                  <i class="fa-solid fa-location-dot mr-1.5"></i>{{ p.lat.toFixed(5) }}, {{ p.lng.toFixed(5) }}
-                </p>
-              } @else {
-                <p class="coords is-empty">
-                  <i class="fa-solid fa-circle-info mr-1.5"></i>Drop a pin or use your current location.
-                </p>
-              }
+              <app-location-picker
+                [location]="pin()"
+                [height]="200"
+                placeholderText="Pin the drop-off location"
+                emptyHint="Drop a pin or use your current location."
+                (locationChange)="onPin($event)"
+                (addressResolved)="onAddressResolved($event)"
+              />
             </div>
 
             <form [formGroup]="form" class="grid gap-3" fbAutofocus>
@@ -247,9 +233,6 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 })
 export class DropOffLocations {
   private readonly service = inject(DropOffLocationService);
-  private readonly geolocation = inject(GeolocationService);
-  private readonly locationPermission = inject(LocationPermissionService);
-  private readonly geocoding = inject(GeocodingService);
   private readonly toast = inject(ToastService);
 
   protected readonly skeletons = Array.from({ length: 3 });
@@ -257,7 +240,6 @@ export class DropOffLocations {
   protected readonly locations = signal<DropOffLocation[]>([]);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
-  protected readonly geoBusy = signal(false);
   protected readonly formOpen = signal(false);
   protected readonly pin = signal<FbLatLng | null>(null);
   /** Id of the row whose activate/deactivate call is in flight. */
@@ -274,15 +256,6 @@ export class DropOffLocations {
         Number(b.isActive) - Number(a.isActive) || b.createdAtUtc.localeCompare(a.createdAtUtc),
     ),
   );
-
-  protected readonly mapConfig = computed<FbMapConfig>(() => ({
-    mode: 'picker',
-    height: 240,
-    zoom: 15,
-    initialLocation: this.pin() ?? environment.mapDefaultCenter,
-    clickToPlace: true,
-    placeholderText: 'Pin the drop-off location',
-  }));
 
   protected readonly form = new FormGroup({
     name: new FormControl('', {
@@ -335,44 +308,13 @@ export class DropOffLocations {
 
   protected onPin(loc: FbLatLng): void {
     this.pin.set(loc);
-    this.reverseFill(loc);
   }
 
-  protected captureGps(): void {
-    this.geoBusy.set(true);
-    this.geolocation.current().subscribe({
-      next: (loc) => {
-        this.pin.set(loc);
-        this.reverseFill(loc, () => this.geoBusy.set(false));
-      },
-      error: (err: GeolocationError) => {
-        this.geoBusy.set(false);
-        if (err.denied) {
-          // Blocked → same "Turn on location" modal the go-active flow uses, and
-          // re-capture if the user enables it and hits "Try again".
-          this.locationPermission.prompt('Turn on location to autofill the address').then((retry) => {
-            if (retry) {
-              this.captureGps();
-            }
-          });
-        } else {
-          this.toast.warning(err.message || 'Could not read your location — drop a pin instead.');
-        }
-      },
-    });
-  }
-
-  /** Best-effort address autofill; a failure just leaves the fields for the admin. */
-  private reverseFill(loc: FbLatLng, done?: () => void): void {
-    this.geocoding.reverseGeocode(loc.lat, loc.lng).subscribe({
-      next: (a) => {
-        done?.();
-        this.form.patchValue({
-          address: a.address || this.form.controls.address.value,
-          city: a.city || this.form.controls.city.value,
-        });
-      },
-      error: () => done?.(),
+  /** Address fields filled from the picker's reverse-geocode of the chosen point. */
+  protected onAddressResolved(a: GeoAddress): void {
+    this.form.patchValue({
+      address: a.address || this.form.controls.address.value,
+      city: a.city || this.form.controls.city.value,
     });
   }
 
