@@ -4,10 +4,12 @@ import { environment } from '@env/environment';
 import { DropOffLocation } from '@core/models/dropoff-location.model';
 import { DropOffLocationService } from '@core/services/dropoff-location.service';
 import { GeocodingService } from '@core/services/geocoding.service';
-import { GeolocationService } from '@core/services/geolocation.service';
+import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
+import { LocationPermissionService } from '@core/services/location-permission.service';
 import { ToastService } from '@core/services/toast.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbInput } from '@shared/ui/input/input';
 import { FbMap } from '@shared/ui/map/fb-map';
 import { FbLatLng, FbMapConfig } from '@shared/ui/map/fb-map.model';
@@ -24,7 +26,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
  */
 @Component({
   selector: 'app-dropoff-locations',
-  imports: [ReactiveFormsModule, FbButton, FbInput, FbMap, EmptyState, PageWrapper],
+  imports: [ReactiveFormsModule, FbButton, FbInput, FbMap, EmptyState, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -84,7 +86,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
               }
             </div>
 
-            <form [formGroup]="form" class="grid gap-3">
+            <form [formGroup]="form" class="grid gap-3" fbAutofocus>
               <app-input
                 label="Name"
                 formControlName="name"
@@ -246,6 +248,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 export class DropOffLocations {
   private readonly service = inject(DropOffLocationService);
   private readonly geolocation = inject(GeolocationService);
+  private readonly locationPermission = inject(LocationPermissionService);
   private readonly geocoding = inject(GeocodingService);
   private readonly toast = inject(ToastService);
 
@@ -342,9 +345,19 @@ export class DropOffLocations {
         this.pin.set(loc);
         this.reverseFill(loc, () => this.geoBusy.set(false));
       },
-      error: (err: Error) => {
+      error: (err: GeolocationError) => {
         this.geoBusy.set(false);
-        this.toast.warning(err.message || 'Could not read your location — drop a pin instead.');
+        if (err.denied) {
+          // Blocked → same "Turn on location" modal the go-active flow uses, and
+          // re-capture if the user enables it and hits "Try again".
+          this.locationPermission.prompt('Turn on location to autofill the address').then((retry) => {
+            if (retry) {
+              this.captureGps();
+            }
+          });
+        } else {
+          this.toast.warning(err.message || 'Could not read your location — drop a pin instead.');
+        }
       },
     });
   }

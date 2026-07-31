@@ -3,6 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Dispute } from '@core/models/dispute.model';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbInput } from '@shared/ui/input/input';
 
 /**
@@ -14,7 +15,7 @@ import { FbInput } from '@shared/ui/input/input';
  */
 @Component({
   selector: 'app-resolve-dispute-dialog',
-  imports: [ReactiveFormsModule, FbInput],
+  imports: [ReactiveFormsModule, FbInput, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="quote">
@@ -30,6 +31,7 @@ import { FbInput } from '@shared/ui/input/input';
     </dl>
 
     <app-input
+      fbAutofocus
       type="textarea"
       label="Resolution note"
       placeholder="What was found, and what was done about it."

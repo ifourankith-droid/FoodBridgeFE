@@ -10,6 +10,7 @@ import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { StatusBadge } from '@shared/ui/status-badge/status-badge';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 
 type Filter = 'all' | ApiListingStatus;
 
@@ -245,7 +246,8 @@ export class AllListings {
   }
 
   protected when(iso: string): string {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString(APP_LOCALE, {
+      timeZone: APP_TIME_ZONE,
       day: 'numeric',
       month: 'short',
       hour: 'numeric',

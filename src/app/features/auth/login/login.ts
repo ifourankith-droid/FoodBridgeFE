@@ -5,12 +5,13 @@ import { Router } from '@angular/router';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AuthService } from '@core/services/auth.service';
 import { ToastService } from '@core/services/toast.service';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput } from '@shared/ui/input/input';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, FbInput, FbButton],
+  imports: [ReactiveFormsModule, FbInput, FbButton, FbAutofocus],
   templateUrl: './login.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

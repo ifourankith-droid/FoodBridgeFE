@@ -8,6 +8,7 @@ import { FbButton } from '@shared/ui/button/button';
 import { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 import { ResolveDisputeDialog } from './resolve-dispute-dialog';
 
 /**
@@ -251,7 +252,8 @@ export class Disputes {
   }
 
   protected when(iso: string): string {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString(APP_LOCALE, {
+      timeZone: APP_TIME_ZONE,
       day: 'numeric',
       month: 'short',
       hour: 'numeric',

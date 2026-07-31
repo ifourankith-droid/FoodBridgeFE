@@ -9,9 +9,11 @@
  *   time      `HH:mm`
  *   datetime  `YYYY-MM-DDTHH:mm`
  *
- * All of these are **local wall-clock** times, never UTC — same as the native
- * controls. Callers convert at the API boundary (`new Date(v).toISOString()`),
- * which is what the existing donor/volunteer forms already do.
+ * All of these are **wall-clock** times, never UTC — same as the native
+ * controls. Convert at the API boundary with the IST-anchored helpers in
+ * `@shared/util/timezone` (`appZonedInputToUtcIso` / `utcIsoToAppZonedInput`)
+ * rather than `new Date(v).toISOString()`, so the value is read as India time
+ * regardless of the user's browser zone.
  */
 export type DatePickerMode = 'date' | 'time' | 'datetime';
 

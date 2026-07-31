@@ -62,7 +62,7 @@
     <!-- Step 2: Personal info -->
     @case (2) {
       <p class="small-label mb-3">Step 2 — Personal information</p>
-      <form [formGroup]="form" class="grid grid-cols-12 gap-3">
+      <form [formGroup]="form" class="grid grid-cols-12 gap-3" fbAutofocus>
         <app-input
           class="col-span-12"
           formControlName="name"
@@ -183,7 +183,7 @@
         <p class="auth-subtitle">
           Enter your mobile number and we'll send a one-time code to confirm it.
         </p>
-        <form [formGroup]="form">
+        <form [formGroup]="form" fbAutofocus>
           <app-input
             type="tel"
             prefix="+91"

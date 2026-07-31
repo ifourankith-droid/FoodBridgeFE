@@ -1,8 +1,9 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, EMPTY, tap } from 'rxjs';
 import { APP_ROUTES } from '@core/config/app-routes';
+import { AvailabilityService } from '@core/services/availability.service';
 import {
   ApiListing,
   ApiNearbyListing,
@@ -18,6 +19,7 @@ import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
 import { VolunteerDeliveriesStore } from '@core/services/volunteer-deliveries.store';
 import { InfiniteScroll } from '@shared/directives/infinite-scroll.directive';
+import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-toggle';
 import { FbButton } from '@shared/ui/button/button';
 import { ListingCard, ListingCardData } from '@shared/ui/listing-card/listing-card';
 import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
@@ -29,6 +31,8 @@ import { ClaimDialog, ClaimDialogData } from './claim-dialog';
 
 const RADIUS_KM = 10;
 const PAGE_SIZE = 12;
+/** How often the feed silently re-fetches while the volunteer is online. */
+const AUTO_REFRESH_MS = 30_000;
 
 const DIETS: readonly DietType[] = ['Veg', 'NonVeg'];
 const MEALS: readonly MealType[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
@@ -55,6 +59,7 @@ const COLOR_DROP = '#1e9e5c';
     DecimalPipe,
     DatePipe,
     InfiniteScroll,
+    AvailabilityToggle,
     FbButton,
     ListingCard,
     ListingGrid,
@@ -68,18 +73,36 @@ const COLOR_DROP = '#1e9e5c';
       [hasActions]="true"
     >
       <ng-container pageActions>
-        <app-button
-          variant="outline"
-          icon="fa-solid fa-location-crosshairs"
-          [loading]="locating()"
-          (clicked)="locateAndLoad()"
-        >
-          Use current location
-        </app-button>
-        <app-button icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="reload()">
-          Refresh
-        </app-button>
+        @if (!offline()) {
+          <app-button
+            variant="outline"
+            icon="fa-solid fa-location-crosshairs"
+            [loading]="locating()"
+            (clicked)="locateAndLoad()"
+          >
+            Use current location
+          </app-button>
+          <app-button icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="reload()">
+            Refresh
+          </app-button>
+        }
       </ng-container>
+
+      @if (offline()) {
+        <!-- Offline volunteers never hit the nearby API — they can't take work
+             while hidden from matching, so prompt them to go Available instead. -->
+        <div class="card-fb p-8 text-center ">
+          <div class="offline-badge"><i class="fa-solid fa-bolt-lightning"></i></div>
+          <h3 class="text-lg font-bold mb-1">You're offline</h3>
+          <p class="text-muted text-sm mb-5">
+            Turn on your availability to load food donations you can pick up nearby. While
+            you're offline we don't fetch listings or match you to anything.
+          </p>
+          <div class="max-w-xl mx-auto">
+            <app-availability-toggle variant="row" />
+          </div>
+        </div>
+      } @else {
 
       <div class="card-fb p-4 mb-4">
         <div class="flex items-center gap-3">
@@ -194,9 +217,25 @@ const COLOR_DROP = '#1e9e5c';
         </div>
       }
 
+      }
     </app-page-wrapper>
   `,
   styles: `
+    /* Offline prompt badge. */
+    .offline-badge {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      font-size: 22px;
+      color: var(--fb-muted);
+      background: var(--fb-bg);
+      border: 1px solid var(--fb-line);
+    }
+
     /* Card actions: primary 70% / route 30%. */
     .action-row {
       display: flex;
@@ -269,6 +308,7 @@ export class Nearby {
   private readonly auth = inject(AuthService);
   private readonly geo = inject(GeolocationService);
   private readonly deliveries = inject(VolunteerDeliveriesStore);
+  private readonly availability = inject(AvailabilityService);
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
@@ -293,6 +333,9 @@ export class Nearby {
   // Server-side filters (GET /listings/nearby?dietType=&mealType=).
   protected readonly diet = signal<DietType | null>(null);
   protected readonly meal = signal<MealType | null>(null);
+
+  /** Volunteer is Offline → we don't hit the nearby API; the page prompts them to go Available. */
+  protected readonly offline = computed(() => !this.availability.isActive());
 
   /** Signal, not a field — the route dialog draws its first leg from here. */
   private readonly center = signal<FbLatLng>({
@@ -325,7 +368,43 @@ export class Nearby {
   });
 
   constructor() {
-    this.locateAndLoad();
+    // Availability gates the whole page. Offline volunteers can't take work while
+    // hidden from matching, so we don't call the nearby API at all — we clear the
+    // feed and show the "go Available" prompt. Going Available loads the feed and
+    // starts live polling; going Offline stops the timer and clears it again. The
+    // effect re-runs on every availability flip.
+    effect((onCleanup) => {
+      if (!this.availability.isActive()) {
+        this.listings.set([]);
+        this.done.set(false);
+        this.loading.set(false);
+        this.locating.set(false);
+        return;
+      }
+      this.locateAndLoad();
+      const handle = setInterval(() => this.autoRefresh(), AUTO_REFRESH_MS);
+      onCleanup(() => clearInterval(handle));
+    });
+  }
+
+  /**
+   * Background poll used by the auto-refresh timer: re-fetch the first page in
+   * place, without the full-grid skeleton or error toasts, so the feed stays
+   * current for an online volunteer without flashing or nagging. Skips while any
+   * other load (initial, locate, load-more) is already in flight.
+   */
+  private autoRefresh(): void {
+    if (this.loading() || this.loadingMore() || this.locating()) {
+      return;
+    }
+    this.fetch(1).subscribe({
+      next: (rows) => {
+        this.listings.set(rows);
+        this.page = 2;
+        this.done.set(rows.length < PAGE_SIZE);
+      },
+      error: () => undefined,
+    });
   }
 
   /**
@@ -568,13 +647,13 @@ export class Nearby {
     const recipientName = claimed?.recipientName ?? '';
     const contacts: RouteContact[] = recipientName
       ? [
-          {
-            label: 'Recipient',
-            icon: 'fa-solid fa-hand-holding-heart',
-            name: recipientName,
-            mobile: claimed?.recipientMobile,
-          },
-        ]
+        {
+          label: 'Recipient',
+          icon: 'fa-solid fa-hand-holding-heart',
+          name: recipientName,
+          mobile: claimed?.recipientMobile,
+        },
+      ]
       : [];
 
     openRouteDialog(this.dialog, {

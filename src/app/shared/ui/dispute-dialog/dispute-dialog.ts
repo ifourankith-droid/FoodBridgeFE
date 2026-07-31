@@ -13,6 +13,7 @@ import { Dispute } from '@core/models/dispute.model';
 import { DialogService } from '@core/services/dialog.service';
 import { DisputeService } from '@core/services/dispute.service';
 import { ToastService } from '@core/services/toast.service';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
 import { FbInput } from '@shared/ui/input/input';
@@ -44,7 +45,7 @@ const PRESETS: readonly string[] = [
  */
 @Component({
   selector: 'app-raise-dispute-dialog',
-  imports: [ReactiveFormsModule, FbInput],
+  imports: [ReactiveFormsModule, FbInput, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <p class="lede">
@@ -62,6 +63,7 @@ const PRESETS: readonly string[] = [
     </div>
 
     <app-input
+      fbAutofocus
       type="textarea"
       label="What happened?"
       placeholder="Describe the issue in a sentence or two."

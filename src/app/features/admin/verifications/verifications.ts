@@ -7,6 +7,7 @@ import { UserService } from '@core/services/user.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 
 /** Backend `AccountStatus` enum names, plus the "no filter" case. */
 type StatusFilter = 'all' | 'Pending' | 'Verified' | 'Suspended';
@@ -439,7 +440,8 @@ export class Verifications {
   }
 
   protected joined(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString(APP_LOCALE, {
+      timeZone: APP_TIME_ZONE,
       day: 'numeric',
       month: 'short',
       year: 'numeric',

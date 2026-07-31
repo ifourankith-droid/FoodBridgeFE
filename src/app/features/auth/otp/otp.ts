@@ -11,11 +11,12 @@ import { Router } from '@angular/router';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AuthService, OtpResult } from '@core/services/auth.service';
 import { ToastService } from '@core/services/toast.service';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from "@shared/ui/button/button";
 
 @Component({
   selector: 'app-otp',
-  imports: [ReactiveFormsModule, FbButton],
+  imports: [ReactiveFormsModule, FbButton, FbAutofocus],
   templateUrl: './otp.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

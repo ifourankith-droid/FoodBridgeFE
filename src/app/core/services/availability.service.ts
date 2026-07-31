@@ -1,12 +1,10 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { switchMap } from 'rxjs';
 import { AccountStatus, UpdateProfileBody } from '@core/models/user.model';
-import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
-import { LocationPermissionModal } from '@shared/ui/location-permission-modal/location-permission-modal';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { AuthService } from './auth.service';
-import { DialogService } from './dialog.service';
 import { GeolocationError, GeolocationService } from './geolocation.service';
+import { LocationPermissionService } from './location-permission.service';
 import { NotificationService } from './notification.service';
 import { ToastService } from './toast.service';
 import { UserService } from './user.service';
@@ -25,19 +23,13 @@ export class AvailabilityService {
   private readonly auth = inject(AuthService);
   private readonly users = inject(UserService);
   private readonly geo = inject(GeolocationService);
-  private readonly dialog = inject(DialogService);
+  private readonly locationPermission = inject(LocationPermissionService);
   private readonly toast = inject(ToastService);
   private readonly notifications = inject(NotificationService);
 
   readonly isActive = signal(false);
   /** True while locating / syncing / calling the backend. */
   readonly busy = signal(false);
-
-  /**
-   * The open "turn on location" dialog, or null — also the "is it open?" flag.
-   * Spelled with its body type because `DialogRef` is invariant in that parameter.
-   */
-  private permissionDialog: DialogRef<boolean, LocationPermissionModal> | null = null;
 
   /**
    * Verification state, read off the same profile fetch that hydrates the
@@ -117,7 +109,7 @@ export class AvailabilityService {
     this.geo.permissionStatus().then((status) => {
       if (status?.state === 'denied') {
         this.busy.set(false);
-        this.openPermissionModal();
+        this.promptToEnableLocation();
         return;
       }
       this.geo.current().subscribe({
@@ -126,7 +118,7 @@ export class AvailabilityService {
           if (err instanceof GeolocationError && err.denied) {
             // Permission was blocked (e.g. denied at the prompt) → guide to enable it.
             this.busy.set(false);
-            this.openPermissionModal();
+            this.promptToEnableLocation();
           } else {
             // Permission is fine; the device just couldn't get a fix → activate anyway.
             const reason = err instanceof Error ? err.message : 'Could not read your location';
@@ -137,55 +129,12 @@ export class AvailabilityService {
     });
   }
 
-  /**
-   * Guide the user to unblock location. Opening it twice is a no-op — `activate()` can
-   * be pressed again while the dialog is up.
-   */
-  private openPermissionModal(): void {
-    if (this.permissionDialog) {
-      return;
-    }
-    const ref = this.dialog.open<unknown, boolean, LocationPermissionModal>({
-      header: {
-        title: 'Turn on location to go active',
-        icon: 'fa-solid fa-location-crosshairs',
-      },
-      content: LocationPermissionModal,
-      size: 'sm',
-      actions: [
-        { id: 'later', label: 'Not now', variant: 'ghost', close: true, result: false },
-        {
-          id: 'retry',
-          label: 'Try again',
-          icon: 'fa-solid fa-rotate-right',
-          close: true,
-          result: true,
-        },
-      ],
-    });
-    this.permissionDialog = ref;
-    ref.closed.subscribe((retry) => {
-      this.permissionDialog = null;
+  /** Guide the user to unblock location, then re-run `activate()` if they retry. */
+  private promptToEnableLocation(): void {
+    this.locationPermission.prompt('Turn on location to go active').then((retry) => {
       if (retry) {
         this.activate();
       }
-    });
-
-    // Auto-retry the moment the user grants permission from the browser UI.
-    this.geo.permissionStatus().then((status) => {
-      if (!status) {
-        return;
-      }
-      const onChange = () => {
-        if (status.state === 'granted' && this.permissionDialog === ref) {
-          status.removeEventListener('change', onChange);
-          // Closing with `true` runs the retry through the same path as the button.
-          ref.close(true);
-        } else if (status.state !== 'prompt') {
-          status.removeEventListener('change', onChange);
-        }
-      };
-      status.addEventListener('change', onChange);
     });
   }
 

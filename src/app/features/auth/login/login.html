@@ -5,7 +5,7 @@
     Enter your mobile number and we'll send you a one-time code to continue.
   </p>
 
-  <form [formGroup]="form" (ngSubmit)="sendOtp()">
+  <form [formGroup]="form" (ngSubmit)="sendOtp()" fbAutofocus>
     <app-input
       type="tel"
       label="Mobile number"

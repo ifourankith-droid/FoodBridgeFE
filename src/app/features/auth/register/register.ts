@@ -6,9 +6,12 @@ import { Router } from '@angular/router';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AuthService } from '@core/services/auth.service';
 import { GeocodingService } from '@core/services/geocoding.service';
+import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
+import { LocationPermissionService } from '@core/services/location-permission.service';
 import { ToastService } from '@core/services/toast.service';
 import { RecipientType, RegistrationDraft } from '@core/models/registration.model';
 import { Role } from '@core/models/user.model';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput } from '@shared/ui/input/input';
 import { FbMap } from '@shared/ui/map/fb-map';
@@ -24,13 +27,15 @@ interface RoleOption {
 
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, DecimalPipe, FbMap, FbInput, FbButton, SuccessAnim],
+  imports: [ReactiveFormsModule, DecimalPipe, FbMap, FbInput, FbButton, SuccessAnim, FbAutofocus],
   templateUrl: './register.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Register {
   private readonly auth = inject(AuthService);
   private readonly geocoding = inject(GeocodingService);
+  private readonly geolocation = inject(GeolocationService);
+  private readonly locationPermission = inject(LocationPermissionService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
@@ -236,28 +241,41 @@ export class Register {
    * failure; the explicit button press surfaces success/failure toasts.
    */
   protected captureGps(auto = false): void {
-    debugger;
-    if (!navigator.geolocation) {
+    if (!this.geolocation.supported) {
       if (!auto) {
         this.toast.warning('Geolocation is not supported on this device.');
       }
       return;
     }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        debugger;
-        const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+    // Route through GeolocationService — its desktop-friendly options (no
+    // high-accuracy GPS wait, cached fix allowed, generous timeout) resolve
+    // reliably where a raw high-accuracy getCurrentPosition would time out.
+    this.geolocation.current().subscribe({
+      next: (loc) => {
+        // Feed the fix to the map so the picker pin recentres on it, then
+        // reverse-geocode to fill the address fields.
         this.location.set(loc);
         this.locationError.set('');
         this.fillAddressFromCoords(loc, auto);
       },
-      () => {
-        if (!auto) {
+      error: (err: GeolocationError) => {
+        // The page-load attempt stays silent; only the explicit button surfaces UI.
+        if (auto) {
+          return;
+        }
+        if (err.denied) {
+          // Blocked → same "Turn on location" modal the go-active flow uses, and
+          // re-capture if the user enables it and hits "Try again".
+          this.locationPermission.prompt('Turn on location to autofill your address').then((retry) => {
+            if (retry) {
+              this.captureGps();
+            }
+          });
+        } else {
           this.toast.warning('Could not read your location — drop a pin on the map instead.');
         }
       },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    });
   }
 
   /** Reverse-geocode the coordinates and pre-fill the address fields (sent to the backend on register). */

@@ -2,10 +2,13 @@ import {
   ApplicationConfig,
   ErrorHandler,
   inject,
+  LOCALE_ID,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZoneChangeDetection,
 } from '@angular/core';
+import { DATE_PIPE_DEFAULT_OPTIONS, registerLocaleData } from '@angular/common';
+import localeEnIn from '@angular/common/locales/en-IN';
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { provideRouter, TitleStrategy, withComponentInputBinding } from '@angular/router';
 
@@ -19,6 +22,11 @@ import {
   sessionExpiryInterceptor,
 } from '@core/http/api.interceptor';
 import { AuthService } from '@core/services/auth.service';
+import { APP_LOCALE, APP_TIME_ZONE_OFFSET } from '@shared/util/timezone';
+
+// FoodBridge is India-only: register the en-IN locale so number/date formats and
+// the DatePipe render the same way for every user, whatever their machine is set to.
+registerLocaleData(localeEnIn);
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -44,5 +52,9 @@ export const appConfig: ApplicationConfig = {
     }),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
     { provide: TitleStrategy, useClass: AppTitleStrategy },
+    // Anchor the app to India: en-IN formats, and every `| date` pipe renders in
+    // IST regardless of the browser's own time zone.
+    { provide: LOCALE_ID, useValue: APP_LOCALE },
+    { provide: DATE_PIPE_DEFAULT_OPTIONS, useValue: { timezone: APP_TIME_ZONE_OFFSET } },
   ],
 };

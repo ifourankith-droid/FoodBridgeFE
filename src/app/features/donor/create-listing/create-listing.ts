@@ -5,17 +5,21 @@ import { Router } from '@angular/router';
 import { APP_ROUTES, AppNavState } from '@core/config/app-routes';
 import { DietType, FreshnessTag, ListingWriteBody, MealType } from '@core/models/listing-api.model';
 import { DonorReport } from '@core/models/report.model';
+import { DialogService } from '@core/services/dialog.service';
 import { ListingService } from '@core/services/listing.service';
 import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
 import { ReportService } from '@core/services/report.service';
 import { ToastService } from '@core/services/toast.service';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbButton } from '@shared/ui/button/button';
 import { FbDatePicker } from '@shared/ui/date-picker/date-picker';
+import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { ImagePicker } from '@shared/ui/image-picker/image-picker';
 import { FbInput, FbSelectOption } from '@shared/ui/input/input';
 import { FbSelect } from '@shared/ui/select/select';
-import { formatLocal } from '@shared/util/date-value';
+import { appZonedInputToOffsetIso, appZonedNowInput, utcIsoToAppZonedInput } from '@shared/util/timezone';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { DonationConsentDialog } from './donation-consent-dialog';
 
 interface NearbyReceiver {
   name: string;
@@ -24,7 +28,7 @@ interface NearbyReceiver {
 
 @Component({
   selector: 'app-create-listing',
-  imports: [ReactiveFormsModule, FbInput, FbSelect, FbDatePicker, FbButton, ImagePicker, PageWrapper],
+  imports: [ReactiveFormsModule, FbInput, FbSelect, FbDatePicker, FbButton, ImagePicker, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -39,7 +43,7 @@ interface NearbyReceiver {
       </div>
 
       <div class="grid gap-4 xl:grid-cols-3">
-        <form [formGroup]="form" class="card-fb p-5 xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form [formGroup]="form" class="card-fb p-5 xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4" fbAutofocus>
           <!-- Pickup address (chosen from the top bar) -->
           <div class="col-span-2">
             <label class="small-label mb-2 block">Pickup Address <span class="text-red-500">*</span></label>
@@ -188,6 +192,7 @@ export class CreateListing {
   private readonly listingService = inject(ListingService);
   private readonly reportService = inject(ReportService);
   protected readonly pickup = inject(PickupAddressService);
+  private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -229,7 +234,7 @@ export class CreateListing {
    * being a few minutes permissive is harmless, a `min` that moves under the
    * user's cursor is not.
    */
-  protected readonly minDeadline = formatLocal(new Date(), 'datetime');
+  protected readonly minDeadline = appZonedNowInput();
 
   protected readonly nearby: NearbyReceiver[] = [
     { name: 'Hope Community Kitchen', dist: 1.2 },
@@ -342,11 +347,65 @@ export class CreateListing {
       quantityMeals: quantity,
       freshnessTag: v.freshnessTag,
       preparedAtUtc: null,
-      pickupDeadlineUtc: new Date(v.pickupDeadline).toISOString(),
+      // The picker value is a wall-clock time. Send it as an IST-offset ISO
+      // (e.g. 2026-08-01T17:30:00+05:30) so the payload carries the exact local
+      // time the donor picked, while still naming an unambiguous instant.
+      pickupDeadlineUtc: appZonedInputToOffsetIso(v.pickupDeadline),
       ...this.pickupPayload(address),
     };
 
     const id = this.editId();
+    // Editing an existing listing posts straight away; a brand-new donation must
+    // pass through the food-safety consent modal first.
+    if (id) {
+      this.postListing(body, id);
+    } else {
+      this.confirmThenPost(body);
+    }
+  }
+
+  /**
+   * Gate a new donation behind the consent modal: the request only fires if the
+   * donor ticks the confirmation and presses "Confirm & Post". Cancelling (or
+   * dismissing) the dialog leaves the form untouched so they can edit and retry.
+   */
+  private confirmThenPost(body: ListingWriteBody): void {
+    const ref: DialogRef<boolean, DonationConsentDialog> = this.dialog.open<
+      unknown,
+      boolean,
+      DonationConsentDialog
+    >({
+      header: {
+        title: 'Confirm your donation',
+        subtitle: 'Food safety & accuracy',
+        icon: 'fa-solid fa-shield-heart',
+      },
+      content: DonationConsentDialog,
+      size: 'md',
+      actions: [
+        { id: 'cancel', label: 'Cancel', variant: 'ghost', close: true, result: false },
+        {
+          id: 'confirm',
+          label: 'Confirm & Post',
+          icon: 'fa-solid fa-paper-plane',
+          variant: 'solid',
+          // Stays disabled until the donor ticks the confirmation box.
+          disabled: () => !ref.body()?.confirmed(),
+          close: true,
+          result: true,
+        },
+      ],
+    });
+
+    ref.closed.subscribe((confirmed) => {
+      if (confirmed) {
+        this.postListing(body, null);
+      }
+    });
+  }
+
+  /** Fire the create/update request, upload any photo, then finish. */
+  private postListing(body: ListingWriteBody, id: string | null): void {
     this.submitting.set(true);
     const request$ = id ? this.listingService.update(id, body) : this.listingService.create(body);
 
@@ -396,8 +455,8 @@ export class CreateListing {
     this.router.navigate([APP_ROUTES.appView('listings')]);
   }
 
-  /** ISO UTC → the picker's local `YYYY-MM-DDTHH:mm` control value. */
+  /** ISO UTC → the picker's IST `YYYY-MM-DDTHH:mm` control value. */
   private toLocalInput(iso: string): string {
-    return formatLocal(new Date(iso), 'datetime');
+    return utcIsoToAppZonedInput(iso);
   }
 }

@@ -6,10 +6,13 @@ import { AuthService } from '@core/services/auth.service';
 import { AvailabilityService } from '@core/services/availability.service';
 import { DialogService } from '@core/services/dialog.service';
 import { GeocodingService } from '@core/services/geocoding.service';
+import { GeolocationError, GeolocationService } from '@core/services/geolocation.service';
+import { LocationPermissionService } from '@core/services/location-permission.service';
 import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
 import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
 import { UpdateProfileBody, UserProfile } from '@core/models/user.model';
+import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-toggle';
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput } from '@shared/ui/input/input';
@@ -26,7 +29,7 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, FbInput, FbButton, RoleBadge, Avatar, FbMap, AvailabilityToggle, PageWrapper],
+  imports: [ReactiveFormsModule, FbInput, FbButton, RoleBadge, Avatar, FbMap, AvailabilityToggle, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -178,7 +181,7 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
                     Use current location
                   </app-button>
                 </div>
-                <form [formGroup]="addrForm" class="grid sm:grid-cols-2 gap-3">
+                <form [formGroup]="addrForm" class="grid sm:grid-cols-2 gap-3" fbAutofocus>
                   <app-input class="sm:col-span-2" label="Label" formControlName="label" placeholder="e.g. Home, Main Branch" [required]="true" [maxlength]="100" hint="A short name to recognise this location." [error]="addrErr('label')" />
                   <app-input class="sm:col-span-2" label="Address" formControlName="address" placeholder="e.g. C.G. Road, Navrangpura" [required]="true" [maxlength]="500" hint="Drop a pin or use GPS to auto-fill." [error]="addrErr('address')" />
                   <app-input label="City" formControlName="city" placeholder="City" />
@@ -427,6 +430,8 @@ export class Profile {
   protected readonly pickup = inject(PickupAddressService);
   protected readonly availability = inject(AvailabilityService);
   private readonly geocoding = inject(GeocodingService);
+  private readonly geolocation = inject(GeolocationService);
+  private readonly locationPermission = inject(LocationPermissionService);
 
   protected readonly profile = signal<UserProfile | null>(null);
   protected readonly loading = signal(true);
@@ -606,23 +611,36 @@ export class Profile {
   }
 
   protected captureGps(): void {
-    if (!navigator.geolocation) {
+    if (!this.geolocation.supported) {
       this.toast.warning('Geolocation is not supported on this device.');
       return;
     }
     this.geoBusy.set(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+    // Route through GeolocationService — its desktop-friendly options (no
+    // high-accuracy GPS wait, cached fix allowed, generous timeout) resolve
+    // reliably where a raw high-accuracy getCurrentPosition would time out.
+    this.geolocation.current().subscribe({
+      next: (loc) => {
+        // Feed the fix to the map so the picker pin recentres on it, then
+        // reverse-geocode to fill the address fields (clears geoBusy).
         this.addLocation.set(loc);
         this.reverseFill(loc, true);
       },
-      () => {
+      error: (err: GeolocationError) => {
         this.geoBusy.set(false);
-        this.toast.warning('Could not read your location — drop a pin on the map instead.');
+        if (err.denied) {
+          // Blocked → same "Turn on location" modal the go-active flow uses, and
+          // re-capture if the user enables it and hits "Try again".
+          this.locationPermission.prompt('Turn on location to autofill your address').then((retry) => {
+            if (retry) {
+              this.captureGps();
+            }
+          });
+        } else {
+          this.toast.warning('Could not read your location — drop a pin on the map instead.');
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    });
   }
 
   /** Reverse-geocode the pinned point to auto-fill the address fields. */
