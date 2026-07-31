@@ -4,13 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, EMPTY, tap } from 'rxjs';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AvailabilityService } from '@core/services/availability.service';
-import {
-  ApiListing,
-  ApiNearbyListing,
-  DietType,
-  DIET_LABELS,
-  MealType,
-} from '@core/models/listing-api.model';
+import { ApiListing, ApiNearbyListing, MealType } from '@core/models/listing-api.model';
 import { AuthService } from '@core/services/auth.service';
 import { DialogService } from '@core/services/dialog.service';
 import { GeolocationService } from '@core/services/geolocation.service';
@@ -22,20 +16,32 @@ import { InfiniteScroll } from '@shared/directives/infinite-scroll.directive';
 import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-toggle';
 import { FbButton } from '@shared/ui/button/button';
 import { ListingCard, ListingCardData } from '@shared/ui/listing-card/listing-card';
-import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { ListingFilters } from '@shared/ui/listing-filters/listing-filters';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { openRouteDialog, RouteContact, RouteStop } from '@shared/ui/route-dialog/route-dialog';
+import { appNow, isExpired } from '@shared/util/timezone';
 import { environment } from '@env/environment';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 import { ClaimDialog, ClaimDialogData } from './claim-dialog';
+
+/** The listing status the nearby feed asks the backend for — "Posted" (i.e. Pending). */
+const NEARBY_STATUS = 'Posted';
 
 const RADIUS_KM = 10;
 const PAGE_SIZE = 12;
 /** How often the feed silently re-fetches while the volunteer is online. */
 const AUTO_REFRESH_MS = 30_000;
 
-const DIETS: readonly DietType[] = ['Veg', 'NonVeg'];
 const MEALS: readonly MealType[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+
+/** Icon + accent per meal — shared by the aside donut and its breakdown rows. */
+const MEAL_META: Record<MealType, { icon: string; color: string; }> = {
+  Breakfast: { icon: 'fa-solid fa-mug-saucer', color: '#ea580c' },
+  Lunch: { icon: 'fa-solid fa-bowl-food', color: '#059669' },
+  Dinner: { icon: 'fa-solid fa-utensils', color: '#4f46e5' },
+  Snacks: { icon: 'fa-solid fa-cookie-bite', color: '#d97706' },
+};
 
 /**
  * A nearby listing paired with the card shape it renders as, plus the full listing
@@ -62,36 +68,42 @@ const COLOR_DROP = '#1e9e5c';
     AvailabilityToggle,
     FbButton,
     ListingCard,
-    ListingGrid,
-    PageWrapper,
+    ListingLayout,
+    ListingFilters,
+    SummaryHeader,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
-      title="Nearby Listings"
+    <app-listing-layout
+      [title]="'Nearby Listings'"
       description="Sorted by distance — claim what you can deliver."
-      [hasActions]="true"
+      [hasActions]="!offline()"
+      [hasAside]="!offline()"
+      [bodyHidden]="offline()"
+      [loading]="loading()"
+      [empty]="!rows().length"
+      gridClass="md:grid-cols-2"
+      emptyIcon="fa-solid fa-map-location-dot"
+      emptyText="No open listings match this filter — widen it or check back soon"
     >
       <ng-container pageActions>
-        @if (!offline()) {
-          <app-button
-            variant="outline"
-            icon="fa-solid fa-location-crosshairs"
-            [loading]="locating()"
-            (clicked)="locateAndLoad()"
-          >
-            Use current location
-          </app-button>
-          <app-button icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="reload()">
-            Refresh
-          </app-button>
-        }
+        <app-button
+          variant="outline"
+          icon="fa-solid fa-location-crosshairs"
+          [loading]="locating()"
+          (clicked)="locateAndLoad()"
+        >
+          Use current location
+        </app-button>
+        <app-button icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="reload()">
+          Refresh
+        </app-button>
       </ng-container>
 
       @if (offline()) {
         <!-- Offline volunteers never hit the nearby API — they can't take work
              while hidden from matching, so prompt them to go Available instead. -->
-        <div class="card-fb p-8 text-center ">
+        <div banner class="card-fb p-8 text-center">
           <div class="offline-badge"><i class="fa-solid fa-bolt-lightning"></i></div>
           <h3 class="text-lg font-bold mb-1">You're offline</h3>
           <p class="text-muted text-sm mb-5">
@@ -102,108 +114,94 @@ const COLOR_DROP = '#1e9e5c';
             <app-availability-toggle variant="row" />
           </div>
         </div>
-      } @else {
+      }
 
-      <div class="card-fb p-4 mb-4">
-        <div class="flex items-center gap-3">
-          <div class="stat-icon !mb-0" style="background:linear-gradient(135deg,var(--fb-success),var(--fb-success-deep))">
-            <i class="fa-solid fa-utensils"></i>
-          </div>
-          <div class="min-w-0">
-            <div class="font-bold">
-              <span class="text-primary-deep text-2xl">{{ rows().length }}</span> open listings within {{ radiusKm }} km
-            </div>
-            <div class="text-xs mt-0.5 flex items-center gap-1" [class.text-success-deep]="locationSource() === 'gps'" [class.text-muted]="locationSource() !== 'gps'">
-              @if (locating()) {
-                <i class="fa-solid fa-spinner fa-spin"></i><span>Finding your location…</span>
-              } @else {
-                <i class="fa-solid" [class]="locationSource() === 'gps' ? 'fa-location-crosshairs' : 'fa-location-dot'"></i>
-                <span>{{ locationLabel() }}</span>
-              }
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-bar">
-          <span class="filter-label">Diet</span>
-          <button type="button" [class]="chipClass(diet() === null)" (click)="setDiet(null)">All</button>
-          @for (d of diets; track d) {
-            <button type="button" [class]="chipClass(diet() === d)" (click)="setDiet(d)">{{ dietLabel(d) }}</button>
-          }
-
-          <span class="filter-sep"></span>
-
-          <span class="filter-label">Meal</span>
-          <button type="button" [class]="chipClass(meal() === null)" (click)="setMeal(null)">All</button>
-          @for (m of meals; track m) {
-            <button type="button" [class]="chipClass(meal() === m)" (click)="setMeal(m)">{{ m }}</button>
-          }
-        </div>
-      </div>
-
-      <app-listing-grid
-        [loading]="loading()"
-        [empty]="!rows().length"
-        gridClass="md:grid-cols-2 xl:grid-cols-3"
-        emptyIcon="fa-solid fa-map-location-dot"
-        emptyText="No open listings match this filter — widen it or check back soon"
+      <app-summary-header
+        summary
+        icon="fa-solid fa-map-location-dot"
+        [loading]="locating()"
+        loadingText="Finding your location…"
       >
-        @for (row of rows(); track row.id) {
-          <app-listing-card [listing]="row.card" [hasMeta]="true" [hasFooter]="true">
-            <div cardMeta>
-              <div class="truncate">
-                <i class="fa-solid fa-location-dot mr-1"></i>{{ row.source.pickupAddress }}
-              </div>
-              <div>
-                <i class="fa-solid fa-route mr-1"></i>{{ row.source.distanceKm | number: '1.0-1' }} km away ·
-                pickup by {{ row.source.pickupDeadlineUtc | date: 'MMM d, h:mm a' }}
-              </div>
-              @if (row.claimed?.estimatedPickupAtUtc; as eta) {
-                <div class="text-success-deep font-semibold">
-                  <i class="fa-regular fa-clock mr-1"></i>Your ETA: {{ eta | date: 'MMM d, h:mm a' }}
-                </div>
-              }
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ rows().length }}</span> open listings within {{ radiusKm }} km
+        </span>
+        <span
+          subtitle
+          class="flex items-center gap-1"
+          [class.text-success-deep]="locationSource() === 'gps'"
+          [class.text-muted]="locationSource() !== 'gps'"
+        >
+          <i class="fa-solid" [class]="locationSource() === 'gps' ? 'fa-location-crosshairs' : 'fa-location-dot'"></i>
+          <span>{{ locationLabel() }}</span>
+        </span>
+      </app-summary-header>
+
+      <app-listing-filters
+        filters
+        [showDiet]="true"
+        [showMeal]="true"
+        [diet]="dietSel()"
+        (dietChange)="dietSel.set($event)"
+        [meal]="mealSel()"
+        (mealChange)="mealSel.set($event)"
+      />
+
+      @for (row of rows(); track row.id) {
+        <app-listing-card [listing]="row.card" [hasMeta]="true" [hasFooter]="true">
+          <div cardMeta>
+            <div class="truncate">
+              <i class="fa-solid fa-location-dot mr-1"></i>{{ row.source.pickupAddress }}
             </div>
-
-            <div cardFooter>
-              <!-- Primary action 70% / route 30%. -->
-              <div class="action-row">
-                @if (row.claimed) {
-                  <app-button class="a-70" variant="success" size="sm" icon="fa-solid fa-truck" [block]="true" (clicked)="goToDeliveries()">
-                    Go to delivery
-                  </app-button>
-                } @else {
-                  <app-button class="a-70" size="sm" icon="fa-solid fa-hand" [block]="true" (clicked)="openClaim(row)">
-                    Claim
-                  </app-button>
-                }
-                <app-button
-                  class="a-30"
-                  variant="outline"
-                  size="sm"
-                  icon="fa-solid fa-diamond-turn-right"
-                  [block]="true"
-                  (clicked)="openRoute(row)"
-                >Route</app-button>
+            <div>
+              <i class="fa-solid fa-route mr-1"></i>{{ row.source.distanceKm | number: '1.0-1' }} km away ·
+              pickup by {{ row.source.pickupDeadlineUtc | date: 'MMM d, h:mm a' }}
+            </div>
+            @if (row.claimed?.estimatedPickupAtUtc; as eta) {
+              <div class="text-success-deep font-semibold">
+                <i class="fa-regular fa-clock mr-1"></i>Your ETA: {{ eta | date: 'MMM d, h:mm a' }}
               </div>
+            }
+          </div>
 
+          <div cardFooter>
+            <!-- Primary action 70% / route 30%. -->
+            <div class="action-row">
               @if (row.claimed) {
-                <app-button
-                  variant="ghost"
-                  size="sm"
-                  icon="fa-solid fa-rotate-left"
-                  [block]="true"
-                  [loading]="releasingId() === row.id"
-                  (clicked)="release(row)"
-                >Release claim</app-button>
+                <app-button class="a-70" variant="success" size="sm" icon="fa-solid fa-truck" [block]="true" (clicked)="goToDeliveries()">
+                  Go to delivery
+                </app-button>
+              } @else {
+                <app-button class="a-70" size="sm" icon="fa-solid fa-hand" [block]="true" (clicked)="openClaim(row)">
+                  Claim
+                </app-button>
               }
+              <app-button
+                class="a-30"
+                variant="outline"
+                size="sm"
+                icon="fa-solid fa-diamond-turn-right"
+                [block]="true"
+                (clicked)="openRoute(row)"
+              >Route</app-button>
             </div>
-          </app-listing-card>
-        }
-      </app-listing-grid>
+
+            @if (row.claimed) {
+              <app-button
+                variant="ghost"
+                size="sm"
+                icon="fa-solid fa-rotate-left"
+                [block]="true"
+                [loading]="releasingId() === row.id"
+                (clicked)="release(row)"
+              >Release claim</app-button>
+            }
+          </div>
+        </app-listing-card>
+      }
 
       @if (!loading()) {
         <div
+          belowGrid
           appInfiniteScroll
           [appInfiniteScrollDisabled]="loadingMore() || done()"
           (scrolled)="loadMore()"
@@ -217,8 +215,105 @@ const COLOR_DROP = '#1e9e5c';
         </div>
       }
 
-      }
-    </app-page-wrapper>
+      <!-- Sticky stats aside — what's in range right now + this session's claims. -->
+      <ng-container aside>
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Open nearby</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="donutBackground()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ rows().length }}</span>
+                <span class="fb-ring-cap">listings</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Within</div>
+              <div class="font-bold text-xl text-primary-deep">{{ radiusKm }} km</div>
+              <div class="text-muted text-[11px] mt-1 truncate">{{ locationLabel() }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- By meal — each row toggles that meal in the feed filter. -->
+        <div class="card-fb p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-bold text-sm">By meal</div>
+            @if (mealSel().length) {
+              <button type="button" class="fb-link text-xs" (click)="mealSel.set([])">Clear</button>
+            }
+          </div>
+          @if (rows().length) {
+            <div class="flex flex-col gap-1">
+              @for (m of mealStats(); track m.id) {
+                <button
+                  type="button"
+                  class="fb-cat-row"
+                  [class.is-active]="mealSel().includes(m.id)"
+                  [attr.aria-pressed]="mealSel().includes(m.id)"
+                  (click)="toggleMeal(m.id)"
+                >
+                  <span class="fb-cat-icon" [style.color]="m.color">
+                    <i [class]="m.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ m.label }}</span>
+                  <span class="fb-cat-count">{{ m.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="m.pct" [style.background]="m.color"></span>
+                  </span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">No open listings in range right now.</p>
+          }
+        </div>
+
+        <!-- This session: live from the volunteer store — claimed (awaiting pickup) and
+             already picked up, so the volunteer sees their in-progress work at a glance. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">This session</div>
+
+          <div class="flex items-center gap-3">
+            <div class="stat-icon !mb-0" style="background:linear-gradient(135deg,var(--fb-success),var(--fb-success-deep))">
+              <i class="fa-solid fa-hand "></i>
+            </div>
+            <div class="min-w-0">
+              <div class="font-bold">
+                <span class="text-success-deep text-2xl">{{ claimedCount() }}</span>
+                {{ claimedCount() === 1 ? 'claim' : 'claims' }}
+              </div>
+              <div class="text-muted text-xs mt-0.5">Now tracked in My Deliveries</div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 mt-3">
+            <div class="stat-icon !mb-0" style="background:linear-gradient(135deg,var(--fb-accent),var(--fb-accent-deep))">
+              <i class="fa-solid fa-box"></i>
+            </div>
+            <div class="min-w-0">
+              <div class="font-bold">
+                <span class="text-primary-deep text-2xl">{{ pickedUpCount() }}</span>
+                picked up
+              </div>
+              <div class="text-muted text-xs mt-0.5">In transit to drop-off</div>
+            </div>
+          </div>
+
+          @if (claimedCount() + pickedUpCount()) {
+            <app-button
+              class="mt-3 block"
+              variant="outline"
+              size="sm"
+              icon="fa-solid fa-truck"
+              [block]="true"
+              (clicked)="goToDeliveries()"
+            >
+              Go to deliveries
+            </app-button>
+          }
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
     /* Offline prompt badge. */
@@ -252,54 +347,6 @@ const COLOR_DROP = '#1e9e5c';
     .action-row + app-button {
       margin-top: 8px;
     }
-
-    .filter-bar {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--fb-line);
-    }
-    .filter-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-      margin-right: 2px;
-    }
-    .filter-sep {
-      width: 1px;
-      align-self: stretch;
-      margin: 0 6px;
-      background: var(--fb-line);
-    }
-    .chip {
-      padding: 5px 13px;
-      font-size: 12.5px;
-      font-weight: 600;
-      border-radius: 999px;
-      border: 1.5px solid var(--fb-line);
-      background: transparent;
-      color: var(--fb-muted);
-      cursor: pointer;
-      transition:
-        background 0.15s ease,
-        color 0.15s ease,
-        border-color 0.15s ease;
-    }
-    .chip:hover {
-      border-color: var(--fb-primary);
-      color: var(--fb-primary-deep);
-    }
-    .chip.active {
-      background: var(--fb-primary);
-      border-color: var(--fb-primary);
-      color: #fff;
-    }
-
   `,
 })
 export class Nearby {
@@ -314,8 +361,6 @@ export class Nearby {
   private readonly router = inject(Router);
 
   protected readonly radiusKm = RADIUS_KM;
-  protected readonly diets = DIETS;
-  protected readonly meals = MEALS;
 
   protected readonly listings = signal<ApiNearbyListing[]>([]);
   /** Listings claimed in this session, keyed by id — they stay in the feed so the
@@ -330,9 +375,11 @@ export class Nearby {
   protected readonly locating = signal(true);
   protected readonly locationSource = signal<'gps' | 'profile' | 'default'>('default');
 
-  // Server-side filters (GET /listings/nearby?dietType=&mealType=).
-  protected readonly diet = signal<DietType | null>(null);
-  protected readonly meal = signal<MealType | null>(null);
+  // Diet + meal filters (multi-select, empty = no filter). Applied client-side
+  // over the loaded feed — the nearby endpoint only takes a single value each, so
+  // multi-select can't be pushed server-side.
+  protected readonly dietSel = signal<string[]>([]);
+  protected readonly mealSel = signal<string[]>([]);
 
   /** Volunteer is Offline → we don't hit the nearby API; the page prompts them to go Available. */
   protected readonly offline = computed(() => !this.availability.isActive());
@@ -344,28 +391,100 @@ export class Nearby {
   });
   private page = 1;
 
-  /** The feed as card view-models, so card inputs keep a stable identity between checks. */
+  /**
+   * The feed as card view-models, narrowed by the diet/meal multi-selects
+   * (client-side), so card inputs keep a stable identity between checks.
+   */
   protected readonly rows = computed<NearbyRow[]>(() => {
     const claimed = this.claimedById();
-    return this.listings().map((l) => {
-      const mine = claimed[l.id] ?? null;
-      return {
-        id: l.id,
-        source: l,
-        claimed: mine,
-        card: {
-          title: l.title,
-          foodType: l.foodType,
-          dietType: l.dietType,
-          mealType: l.mealType,
-          quantityMeals: l.quantityMeals,
-          freshnessTag: l.freshnessTag,
-          pickupDeadlineUtc: l.pickupDeadlineUtc,
-          status: mine ? mine.status : 'Pending',
-        },
-      };
-    });
+    const diets = new Set(this.dietSel());
+    const meals = new Set(this.mealSel());
+    const now = appNow();
+    return this.listings()
+      .filter((l) => {
+        if (!claimed[l.id] && isExpired(l.pickupDeadlineUtc, now)) {
+          return false;
+        }
+        if (diets.size && (!l.dietType || !diets.has(l.dietType))) {
+          return false;
+        }
+        if (meals.size && (!l.mealType || !meals.has(l.mealType))) {
+          return false;
+        }
+        return true;
+      })
+      .map((l) => {
+        const mine = claimed[l.id] ?? null;
+        return {
+          id: l.id,
+          source: l,
+          claimed: mine,
+          card: {
+            title: l.title,
+            foodType: l.foodType,
+            dietType: l.dietType,
+            mealType: l.mealType,
+            quantityMeals: l.quantityMeals,
+            freshnessTag: l.freshnessTag,
+            pickupDeadlineUtc: l.pickupDeadlineUtc,
+            status: mine ? mine.status : 'Pending',
+            imageUrl: l.imageUrl,
+          },
+        };
+      });
   });
+
+  /** "This session" tallies, live from the volunteer store: claimed (awaiting pickup)
+      and already picked up (in transit). */
+  protected readonly claimedCount = computed(() => this.deliveries.awaitingPickup().length);
+  protected readonly pickedUpCount = computed(() => this.deliveries.inTransit().length);
+
+  /** Composition of the current feed by meal type, for the aside donut + rows. */
+  protected readonly mealStats = computed(() => {
+    const rows = this.listings();
+    const total = rows.length || 1;
+    const counts = {} as Record<MealType, number>;
+    for (const l of rows) {
+      if (l.mealType) {
+        counts[l.mealType] = (counts[l.mealType] ?? 0) + 1;
+      }
+    }
+    return MEALS.map((m) => ({
+      id: m,
+      label: m,
+      icon: MEAL_META[m].icon,
+      color: MEAL_META[m].color,
+      count: counts[m] ?? 0,
+      pct: Math.round(((counts[m] ?? 0) / total) * 100),
+    })).filter((row) => row.count > 0);
+  });
+
+  /** Multi-segment conic gradient for the meal donut. */
+  protected readonly donutBackground = computed(() => {
+    const total = this.listings().length;
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    let acc = 0;
+    const segments = this.mealStats().map((m) => {
+      const start = (acc / total) * 100;
+      acc += m.count;
+      const end = (acc / total) * 100;
+      return `${m.color} ${start}% ${end}%`;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
+
+  /** Toggle a meal from a breakdown row — same selection the Meal dropdown drives. */
+  protected toggleMeal(m: MealType): void {
+    const set = new Set(this.mealSel());
+    if (set.has(m)) {
+      set.delete(m);
+    } else {
+      set.add(m);
+    }
+    this.mealSel.set([...set]);
+  }
 
   constructor() {
     // Availability gates the whole page. Offline volunteers can't take work while
@@ -463,30 +582,6 @@ export class Nearby {
         return 'Using the default area';
     }
   });
-
-  protected chipClass(active: boolean): string {
-    return active ? 'chip active' : 'chip';
-  }
-
-  protected dietLabel(d: DietType): string {
-    return DIET_LABELS[d];
-  }
-
-  protected setDiet(d: DietType | null): void {
-    if (this.diet() === d) {
-      return;
-    }
-    this.diet.set(d);
-    this.reload();
-  }
-
-  protected setMeal(m: MealType | null): void {
-    if (this.meal() === m) {
-      return;
-    }
-    this.meal.set(m);
-    this.reload();
-  }
 
   protected reload(): void {
     this.page = 1;
@@ -683,9 +778,9 @@ export class Nearby {
 
   private fetch(page: number) {
     const { lat, lng } = this.center();
-    return this.listingService.nearby(lat, lng, RADIUS_KM, page, PAGE_SIZE, {
-      dietType: this.diet() ?? undefined,
-      mealType: this.meal() ?? undefined,
-    });
+    // Ask the backend for Posted (Pending) listings only. Diet/meal are applied
+    // client-side in `rows()` — the endpoint takes a single value each and can't
+    // do multi-select — as is the expiry guard.
+    return this.listingService.nearby(lat, lng, RADIUS_KM, page, PAGE_SIZE, { status: NEARBY_STATUS });
   }
 }

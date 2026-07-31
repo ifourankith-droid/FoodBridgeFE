@@ -3,31 +3,32 @@ import { Observable, tap } from 'rxjs';
 import { ApiListing } from '@core/models/listing-api.model';
 import { AuthService } from './auth.service';
 import { DropOffSelection, ListingService } from './listing.service';
-import { StorageService } from './storage.service';
-
-/** localStorage key prefix — one bucket per volunteer id, so accounts never mix. */
-const STORAGE_PREFIX = 'foodbridge.volunteerDeliveries';
 
 /**
  * Holds the listings this volunteer has claimed and drives their pickup/delivery
  * confirmations.
  *
- * The backend (Phases 2–5) has no "list my active deliveries" endpoint yet — that
- * arrives with the Volunteer Data module (Phase 8) — and `GET /listings` is DonorOnly,
- * so there is no way to re-read a volunteer's claims from the server. Claims are
- * therefore tracked client-side from claim time and mirrored into localStorage
- * (keyed by user id) so My Deliveries survives a page reload instead of emptying.
+ * The list is loaded from the backend — `GET /listings/deliveries` returns every
+ * listing whose `VolunteerId` is the signed-in volunteer, across all stages
+ * (Claimed → Confirmed). It reloads whenever the signed-in volunteer changes.
+ *
+ * Confirmations and claims still update the in-memory list optimistically from
+ * the action's own response (so, e.g., a just-picked-up listing keeps the
+ * suggested drop-off the confirm-pickup call returned, which a plain reload
+ * wouldn't carry), but the source of truth is the server, not local storage.
  */
 @Injectable({ providedIn: 'root' })
 export class VolunteerDeliveriesStore {
   private readonly listingService = inject(ListingService);
-  private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
 
   private readonly items = signal<ApiListing[]>([]);
 
-  /** Whose claims `items` currently holds — decides hydrate vs. persist below. */
-  private hydratedFor: string | null = null;
+  /** True while the volunteer's deliveries are being (re)loaded from the API. */
+  readonly loading = signal(false);
+
+  /** Whose deliveries `items` currently holds — guards a reload per signed-in volunteer. */
+  private loadedFor: string | null = null;
 
   /** Everything tracked, newest first. */
   readonly all = this.items.asReadonly();
@@ -58,24 +59,36 @@ export class VolunteerDeliveriesStore {
   );
 
   constructor() {
-    // One effect for both directions: a change of user hydrates that user's bucket,
-    // any other change writes the current list back to it.
+    // Load the signed-in volunteer's claimed listings from the API, and reload
+    // when the user changes. Non-volunteers (or signed-out) hold an empty list.
     effect(() => {
-      const userId = this.auth.currentUser()?.id ?? null;
-      const items = this.items();
-      if (!userId) {
+      const user = this.auth.currentUser();
+      const id = user?.id ?? null;
+      if (!id || user?.role !== 'volunteer') {
+        this.items.set([]);
+        this.loadedFor = null;
         return;
       }
-      if (this.hydratedFor !== userId) {
-        this.hydratedFor = userId;
-        this.items.set(this.storage.getItem<ApiListing[]>(this.storageKey(userId)) ?? []);
-        return;
+      if (this.loadedFor !== id) {
+        this.loadedFor = id;
+        this.load();
       }
-      this.storage.setItem(this.storageKey(userId), items);
     });
   }
 
-  /** Add a freshly claimed listing (or replace an existing entry). */
+  /** (Re)fetch this volunteer's claimed listings from the backend. */
+  load(): void {
+    this.loading.set(true);
+    this.listingService.myDeliveries().subscribe({
+      next: (items) => {
+        this.items.set(items);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  /** Add a freshly claimed listing (or replace an existing entry) — optimistic. */
   track(listing: ApiListing): void {
     this.upsert(listing);
   }
@@ -106,9 +119,5 @@ export class VolunteerDeliveriesStore {
       const rest = list.filter((l) => l.id !== listing.id);
       return [listing, ...rest];
     });
-  }
-
-  private storageKey(userId: string): string {
-    return `${STORAGE_PREFIX}.${userId}`;
   }
 }

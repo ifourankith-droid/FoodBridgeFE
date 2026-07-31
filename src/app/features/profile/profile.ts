@@ -58,7 +58,18 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
               <h4 class="id-name">{{ u.name }}</h4>
               <div class="id-meta">
                 <app-role-badge [role]="u.role" size="sm" />
-                @if (statusMeta(u.accountStatus); as s) {
+                @if (isDonor()) {
+                  <!-- Donors: certification status rather than the generic account status. -->
+                  @if (u.accountStatus === 'Verified') {
+                    <span class="acc-badge verified">
+                      <i class="fa-solid fa-certificate" aria-hidden="true"></i>Certified Donor
+                    </span>
+                  } @else {
+                    <span class="acc-badge muted">
+                      <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>Not certified
+                    </span>
+                  }
+                } @else if (statusMeta(u.accountStatus); as s) {
                   <span class="acc-badge" [class]="s.cls">
                     <i [class]="s.icon" aria-hidden="true"></i>{{ u.accountStatus }}
                   </span>
@@ -339,6 +350,9 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
     }
     .acc-badge.suspended {
       --acc: #e04434;
+    }
+    .acc-badge.muted {
+      --acc: #64748b;
     }
     .addr-row {
       display: flex;

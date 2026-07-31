@@ -140,10 +140,10 @@ function isCategory(id: NotificationFilter): id is NotificationCategory {
           <!-- Read progress -->
           <div class="card-fb p-5">
             <div class="flex items-center gap-4">
-              <div class="ring" [style.background]="ringBackground()">
-                <div class="ring-inner">
-                  <span class="ring-num">{{ notifications.unreadCount() }}</span>
-                  <span class="ring-cap">unread</span>
+              <div class="fb-ring" [style.background]="ringBackground()">
+                <div class="fb-ring-inner">
+                  <span class="fb-ring-num">{{ notifications.unreadCount() }}</span>
+                  <span class="fb-ring-cap">unread</span>
                 </div>
               </div>
               <div class="min-w-0">

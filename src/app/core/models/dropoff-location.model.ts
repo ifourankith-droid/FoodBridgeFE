@@ -46,6 +46,8 @@ export interface DropOffHotspot {
   isCoolingDown: boolean;
   /** When it frees up again; null when already available. */
   cooldownUntilUtc: string | null;
+  /** Name of the volunteer who added a field-discovered spot; null for admin-curated ones. */
+  addedByName: string | null;
 }
 
 /**

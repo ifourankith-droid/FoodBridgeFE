@@ -37,6 +37,20 @@ export interface ApiListingTimelineEntry {
   createdAtUtc: string;
 }
 
+/**
+ * One event from the standalone timeline endpoint (`GET /listings/{id}/timeline`) —
+ * the status it moved to, the actor's resolved name, the time, and any note / photo.
+ */
+export interface ApiTimelineEvent {
+  fromStatus: string | null;
+  status: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  note: string | null;
+  photoUrl: string | null;
+  createdAtUtc: string;
+}
+
 /** Full detail — GET /listings/{id}, POST /claim, /confirm-pickup, /confirm-delivery, /cancel. */
 export interface ApiListing {
   id: string;
@@ -98,7 +112,7 @@ export interface ApiListingSummary {
   imageUrl: string | null;
 }
 
-/** Nearby shape — GET /listings/nearby (adds distance, drops timeline/images). */
+/** Nearby shape — GET /listings/nearby (adds distance, drops the full timeline). */
 export interface ApiNearbyListing {
   id: string;
   title: string;
@@ -112,6 +126,8 @@ export interface ApiNearbyListing {
   latitude: number;
   longitude: number;
   distanceKm: number;
+  /** First uploaded photo, or null — used as the card thumbnail (same as the donor list). */
+  imageUrl: string | null;
 }
 
 /**

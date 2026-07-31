@@ -11,17 +11,26 @@ import { ToastService } from '@core/services/toast.service';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
 import { FbButton } from '@shared/ui/button/button';
-import { FbInput } from '@shared/ui/input/input';
+import { FbInput, FbSelectOption } from '@shared/ui/input/input';
+import { FbSelect } from '@shared/ui/select/select';
 import { ImagePicker } from '@shared/ui/image-picker/image-picker';
 
+/** Sentinel option value for the "add a new spot" branch. */
+const NEW_SPOT = '__new__';
+/** Sentinel option value for "delivered to the matched recipient". */
+const RECIPIENT = '__recipient__';
+
 export interface DeliveryDialogData {
-  /** Where to centre the hotspot search — the listing's pickup point. */
+  /** Where to centre the hotspot search — the listing's pickup point. Also used as the
+      drop-off coordinates when delivering to a matched recipient (who has no coordinates). */
   latitude: number;
   longitude: number;
   /** Pre-select this spot (the one confirm-pickup already suggested), when still available. */
   suggestedLocationId?: string | null;
   /** True when this confirmation completes the donation outright (no recipient waiting). */
   completesDonation: boolean;
+  /** The matched recipient's name, when one exists — offered as the pre-selected drop-off. */
+  recipientName?: string | null;
 }
 
 /**
@@ -35,7 +44,7 @@ export interface DeliveryDialogData {
  */
 @Component({
   selector: 'app-delivery-dialog',
-  imports: [ImagePicker, FbButton, FbInput, ReactiveFormsModule],
+  imports: [ImagePicker, FbButton, FbInput, FbSelect, ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-col gap-5">
@@ -51,50 +60,18 @@ export interface DeliveryDialogData {
       />
 
       <div class="flex flex-col gap-2">
-        <span class="fb-field-label">Where did you drop it off?</span>
-
-        @if (loading()) {
-          <p class="fb-help"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Finding nearby spots…</p>
-        }
-
-        @for (spot of spots(); track spot.id) {
-          <button
-            type="button"
-            class="spot"
-            [class.selected]="selectedId() === spot.id"
-            [class.cooling]="spot.isCoolingDown"
-            [disabled]="spot.isCoolingDown"
-            (click)="pickExisting(spot.id)"
-          >
-            <i class="fa-solid" [class.fa-circle-check]="selectedId() === spot.id"
-               [class.fa-location-dot]="selectedId() !== spot.id"></i>
-            <span class="min-w-0 flex-1 text-left">
-              <span class="block truncate font-bold">{{ spot.name }}</span>
-              <span class="block truncate text-xs text-muted">
-                {{ spot.distanceKm }} km
-                @if (spot.deliveryCount > 0) {
-                  · {{ spot.deliveryCount }} past
-                  {{ spot.deliveryCount === 1 ? 'delivery' : 'deliveries' }}
-                }
-                @if (spot.isCoolingDown) {
-                  · served recently, try later
-                }
-              </span>
-            </span>
-          </button>
-        }
-
-        <!-- Always offered: the whole point is that a volunteer on the ground knows
-             places the platform doesn't yet. -->
-        <button
-          type="button"
-          class="spot"
-          [class.selected]="isNew()"
-          (click)="startNew()"
-        >
-          <i class="fa-solid" [class.fa-circle-check]="isNew()" [class.fa-plus]="!isNew()"></i>
-          <span class="text-left font-bold">Somewhere else — add a new spot</span>
-        </button>
+        <!-- Custom single-select: each nearby spot shows its distance + past deliveries,
+             cooling spots are disabled, and the last option opens the "add new" branch. -->
+        <app-select
+          label="Where did you drop it off?"
+          icon="fa-solid fa-location-dot"
+          placeholder="Select a drop-off spot"
+          emptyText="No spots found — add one below"
+          [searchable]="false"
+          [loading]="loading()"
+          [options]="options()"
+          [formControl]="spotControl"
+        />
 
         @if (isNew()) {
           <div class="new-spot">
@@ -131,31 +108,6 @@ export interface DeliveryDialogData {
   `,
   styles: [
     `
-      .spot {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid var(--fb-line);
-        border-radius: 12px;
-        background: var(--fb-surface);
-        transition: border-color 0.15s ease, background 0.15s ease;
-      }
-      .spot:hover:not(:disabled) {
-        border-color: var(--fb-primary);
-      }
-      .spot.selected {
-        border-color: var(--fb-primary);
-        background: var(--fb-primary-soft);
-      }
-      .spot.cooling {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      .spot > i {
-        color: var(--fb-primary);
-      }
       .new-spot {
         display: flex;
         flex-direction: column;
@@ -177,10 +129,15 @@ export class DeliveryDialog {
 
   protected readonly spots = signal<DropOffHotspot[]>([]);
   protected readonly loading = signal(true);
-  protected readonly selectedId = signal<string | null>(null);
-  protected readonly isNew = signal(false);
   protected readonly newCoords = signal<{ lat: number; lng: number } | null>(null);
   protected readonly locating = signal(false);
+
+  /** The custom single-select's value: a spot id, the {@link NEW_SPOT} sentinel, or null. */
+  protected readonly spotControl = new FormControl<string | null>(null);
+  private readonly selectedValue = signal<string | null>(null);
+
+  /** "Add a new spot" branch is active — reveals the name + location form below. */
+  protected readonly isNew = computed(() => this.selectedValue() === NEW_SPOT);
 
   /** Reactive control per project convention; mirrored into a signal for `dropOff`. */
   protected readonly nameControl = new FormControl('', {
@@ -190,19 +147,62 @@ export class DeliveryDialog {
   private readonly newName = signal('');
 
   /**
+   * Dropdown options: the matched recipient first (when there is one), then each nearby
+   * spot (distance + past deliveries), then "add a new spot".
+   */
+  protected readonly options = computed<FbSelectOption[]>(() => {
+    const opts: FbSelectOption[] = [];
+
+    // A matched recipient has no coordinates of its own, so it's offered as a drop-off
+    // pointed at the pickup location — this is where the volunteer hands the food over.
+    if (this.data.recipientName) {
+      opts.push({
+        value: RECIPIENT,
+        label: this.data.recipientName,
+        icon: 'fa-solid fa-hand-holding-heart',
+        description: 'Recipient — deliver here',
+      });
+    }
+
+    opts.push(
+      ...this.spots().map((s) => ({
+        value: s.id,
+        label: s.name,
+        icon: 'fa-solid fa-location-dot',
+        description: this.spotDescription(s),
+        disabled: s.isCoolingDown,
+      })),
+    );
+
+    opts.push({
+      value: NEW_SPOT,
+      label: 'Somewhere else — add a new spot',
+      icon: 'fa-solid fa-plus',
+    });
+    return opts;
+  });
+
+  /**
    * The choice to submit, or null while it's incomplete — the footer's Confirm reads this,
    * so an unnamed or un-located new spot can't be sent (the backend would 422 it anyway).
    */
   readonly dropOff = computed<DropOffSelection | null>(() => {
-    if (this.isNew()) {
+    const value = this.selectedValue();
+    if (value === RECIPIENT) {
+      // No recipient coordinates exist, so the hand-over is recorded at the pickup point.
+      const name = this.data.recipientName?.trim();
+      return name
+        ? { latitude: this.data.latitude, longitude: this.data.longitude, name }
+        : null;
+    }
+    if (value === NEW_SPOT) {
       const name = this.newName().trim();
       const coords = this.newCoords();
       return name && coords
         ? { latitude: coords.lat, longitude: coords.lng, name }
         : null;
     }
-    const id = this.selectedId();
-    return id ? { locationId: id } : null;
+    return value ? { locationId: value } : null;
   });
 
   constructor() {
@@ -210,35 +210,52 @@ export class DeliveryDialog {
       .pipe(takeUntilDestroyed())
       .subscribe((value) => this.newName.set(value));
 
+    this.spotControl.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((value) => this.selectedValue.set(value));
+
+    // With a matched recipient, delivering to them is the default — pre-select it now
+    // (it doesn't depend on the hotspot list, which loads asynchronously below).
+    if (this.data.recipientName) {
+      this.spotControl.setValue(RECIPIENT);
+    }
+
     this.dropOffs.hotspots(this.data.latitude, this.data.longitude).subscribe({
       next: (spots) => {
         this.spots.set(spots);
-        // Prefer the spot confirm-pickup already suggested; otherwise the backend's first
-        // row, which is ordered available-first then nearest. Never auto-pick a cooling one.
-        const suggested = spots.find(
-          (s) => s.id === this.data.suggestedLocationId && !s.isCoolingDown,
-        );
-        const fallback = spots.find((s) => !s.isCoolingDown);
-        this.selectedId.set((suggested ?? fallback)?.id ?? null);
+        // Only auto-pick a hotspot when there's no recipient already selected. Prefer the
+        // spot confirm-pickup suggested; otherwise the first available (nearest), never a
+        // cooling one.
+        if (!this.data.recipientName) {
+          const suggested = spots.find(
+            (s) => s.id === this.data.suggestedLocationId && !s.isCoolingDown,
+          );
+          const fallback = spots.find((s) => !s.isCoolingDown);
+          this.spotControl.setValue((suggested ?? fallback)?.id ?? null);
+        }
         this.loading.set(false);
       },
       error: () => {
         // A failed lookup must not block the delivery — the volunteer can still add the
-        // spot they're standing at by hand.
+        // spot they're standing at by hand (unless a recipient is already selected).
         this.loading.set(false);
-        this.isNew.set(true);
+        if (!this.data.recipientName) {
+          this.spotControl.setValue(NEW_SPOT);
+        }
       },
     });
   }
 
-  protected pickExisting(id: string): void {
-    this.isNew.set(false);
-    this.selectedId.set(id);
-  }
-
-  protected startNew(): void {
-    this.isNew.set(true);
-    this.selectedId.set(null);
+  /** "3.2 km · 4 past deliveries" (+ cooling note) — the option's second line. */
+  private spotDescription(s: DropOffHotspot): string {
+    const parts = [`${s.distanceKm} km`];
+    if (s.deliveryCount > 0) {
+      parts.push(`${s.deliveryCount} past ${s.deliveryCount === 1 ? 'delivery' : 'deliveries'}`);
+    }
+    if (s.isCoolingDown) {
+      parts.push('served recently, try later');
+    }
+    return parts.join(' · ');
   }
 
   protected useMyLocation(): void {

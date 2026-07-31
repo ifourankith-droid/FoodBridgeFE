@@ -73,6 +73,18 @@
       <app-availability-toggle />
     }
 
+    <!-- Light / dark theme -->
+    <button
+      type="button"
+      class="btn-icon theme-btn"
+      (click)="theme.toggle()"
+      [title]="theme.darkMode() ? 'Switch to light theme' : 'Switch to dark theme'"
+      [attr.aria-label]="theme.darkMode() ? 'Switch to light theme' : 'Switch to dark theme'"
+      [attr.aria-pressed]="theme.darkMode()"
+    >
+      <i class="fa-solid" [class]="theme.darkMode() ? 'fa-sun' : 'fa-moon'"></i>
+    </button>
+
     <!-- Notifications -->
     <app-notification-bell [open]="notifOpen()" (openChange)="onNotifOpenChange($event)" />
 

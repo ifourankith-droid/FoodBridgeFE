@@ -1,11 +1,25 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  ElementRef,
+  inject,
+  viewChild,
+} from '@angular/core';
 import { ToastService } from '@core/services/toast.service';
 
 @Component({
   selector: 'app-toast',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="fb-toast-stack" role="region" aria-live="polite" aria-label="Notifications">
+    <div
+      #stack
+      popover="manual"
+      class="fb-toast-stack"
+      role="region"
+      aria-live="polite"
+      aria-label="Notifications"
+    >
       @for (t of toast.toasts(); track t.id) {
         <div class="fb-toast" [attr.data-type]="t.type" role="alert">
           <span class="fb-toast__icon">
@@ -39,6 +53,21 @@ import { ToastService } from '@core/services/toast.service';
       gap: 12px;
       width: min(380px, calc(100vw - 32px));
       pointer-events: none;
+    }
+
+    /* Promoted into the top layer via the popover API so it clears native
+       <dialog> modals (which the z-index alone can't). Reset the popover UA
+       chrome (inset/margin/border/background) back to the fixed top-right stack. */
+    .fb-toast-stack:popover-open {
+      inset: auto;
+      top: 22px;
+      right: 22px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      overflow: visible;
+      height: auto;
     }
 
     .fb-toast {
@@ -179,4 +208,34 @@ import { ToastService } from '@core/services/toast.service';
 })
 export class Toast {
   protected readonly toast = inject(ToastService);
+
+  private readonly stack = viewChild<ElementRef<HTMLElement>>('stack');
+
+  constructor() {
+    // Native <dialog>.showModal() puts modals in the browser's top layer, which
+    // sits above every z-index — so the toast stack has to enter the top layer
+    // too or it renders behind an open modal. Promote it via the popover API,
+    // and re-promote on each change so a toast fired while a modal is already
+    // open still lands on top (the top layer stacks by promotion order).
+    effect(() => {
+      const ref = this.stack();
+      const hasToasts = this.toast.toasts().length > 0;
+      if (!ref) {
+        return;
+      }
+      const el = ref.nativeElement;
+      if (typeof el.showPopover !== 'function') {
+        return; // Popover API unsupported — fall back to the z-index above.
+      }
+      const open = el.matches(':popover-open');
+      if (hasToasts) {
+        if (open) {
+          el.hidePopover();
+        }
+        el.showPopover();
+      } else if (open) {
+        el.hidePopover();
+      }
+    });
+  }
 }
