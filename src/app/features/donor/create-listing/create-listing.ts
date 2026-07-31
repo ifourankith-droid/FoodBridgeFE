@@ -554,7 +554,14 @@ export class CreateListing {
   /** Fire the create/update request, upload any photo, then finish. */
   private postListing(body: ListingWriteBody, id: string | null): void {
     this.submitting.set(true);
-    const request$ = id ? this.listingService.update(id, body) : this.listingService.create(body);
+    // `acceptedFoodSafety` is required by POST /api/listings and rejected as 400 when absent
+    // or false — the backend enforces the declaration rather than trusting the UI, since a
+    // client-side-only checkbox is bypassed by calling the endpoint directly. Safe to hard-code
+    // true here: the create path is only reachable from confirmThenPost(), which won't call this
+    // until the donor has ticked the box. Editing doesn't re-ask, so update() omits it.
+    const request$ = id
+      ? this.listingService.update(id, body)
+      : this.listingService.create({ ...body, acceptedFoodSafety: true });
 
     request$.subscribe({
       next: (listing) => {

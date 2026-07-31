@@ -3,7 +3,15 @@
  * configuration's `fileReplacements` (see angular.json).
  *
  */
-const API_ORIGIN = 'https://REPLACE-ME-foodbridge-api.azurewebsites.net';
+/**
+ * The deployed API. Everything server-side hangs off this one constant: REST calls (`apiUrl`),
+ * the SignalR hubs (`hubUrl`), and uploaded media (`mediaUrl()` in `@shared/util/media-url`).
+ *
+ * Because the frontend is hosted on a different origin (Azure Static Web Apps) than the API, the
+ * API's CORS policy must list the frontend's origin — see `Cors:AllowedOrigins` in
+ * `appsettings.Production.json` / the `Cors__AllowedOrigins__0` app setting.
+ */
+const API_ORIGIN = 'https://foodbridge-api.azurewebsites.net';
 
 export const environment = {
   production: true,

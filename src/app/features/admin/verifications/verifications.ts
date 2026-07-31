@@ -7,6 +7,7 @@ import { UserService } from '@core/services/user.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { mediaUrl } from '@shared/util/media-url';
 import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 
 /** Backend `AccountStatus` enum names, plus the "no filter" case. */
@@ -300,7 +301,13 @@ export class Verifications {
           this.toast.error('That document is no longer available.');
           return;
         }
-        window.open(doc.fileUrl, '_blank', 'noopener');
+        // Absolutised against the API's origin: `fileUrl` is server-relative (`/uploads/…`), and a
+        // new tab opened against the frontend's origin would 404 — leaving an admin unable to see
+        // the ID they're being asked to approve.
+        const url = mediaUrl(doc.fileUrl);
+        if (url) {
+          window.open(url, '_blank', 'noopener');
+        }
       },
       error: (err: Error) => this.toast.error(err.message || 'Could not open the document'),
     });

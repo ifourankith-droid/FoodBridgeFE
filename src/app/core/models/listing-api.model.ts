@@ -57,6 +57,11 @@ export interface ApiListing {
   recipientId: string | null;
   /** Volunteer's committed pickup ETA — non-null only if given on claim; cleared on unclaim. */
   estimatedPickupAtUtc?: string | null;
+  /**
+   * When the donor confirmed the food is safe and its quality is their responsibility. Null only for
+   * listings created before that declaration was required — never for one that skipped it.
+   */
+  foodSafetyAcceptedAtUtc?: string | null;
   // Contact info (Phase 11) — gated to the listing's own parties, else null.
   donorName?: string | null;
   donorMobile?: string | null;
@@ -147,6 +152,16 @@ export interface ListingWriteBody {
   pickupAddress?: string;
   latitude?: number;
   longitude?: number;
+  /**
+   * The donor's food-safety declaration. **Required and must be `true` on create** — the backend
+   * rejects the request otherwise, and stamps `foodSafetyAcceptedAtUtc` on the listing. Omitted when
+   * editing, which doesn't re-ask.
+   *
+   * Set in `CreateListing.postListing()`, which on the create path is only reachable via
+   * `confirmThenPost()` — i.e. after the donor ticked the box in `DonationConsentDialog`. Don't set
+   * it anywhere else, or the declaration stops meaning anything.
+   */
+  acceptedFoodSafety?: boolean;
 }
 
 export const DIET_LABELS: Record<DietType, string> = {

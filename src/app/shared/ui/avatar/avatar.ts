@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { initials as toInitials } from '@shared/util/initials';
+import { mediaUrl } from '@shared/util/media-url';
 
 /**
  * Circular avatar. Shows the user's photo when `imageUrl` is provided, otherwise
@@ -19,7 +20,7 @@ import { initials as toInitials } from '@shared/util/initials';
       [style.fontSize.px]="size() * 0.36"
     >
       @if (showImage()) {
-        <img [src]="imageUrl()" [alt]="name() || 'Avatar'" (error)="onImageError()" />
+        <img [src]="resolvedUrl()" [alt]="name() || 'Avatar'" (error)="onImageError()" />
       } @else {
         {{ initials() }}
       }
@@ -58,6 +59,12 @@ export class Avatar {
 
   protected readonly initials = computed(() => toInitials(this.name()));
 
+  /**
+   * Absolutised against the API's origin — the API returns `/uploads/…`, which a browser would
+   * otherwise resolve against the frontend's own origin and 404 in production.
+   */
+  protected readonly resolvedUrl = computed(() => mediaUrl(this.imageUrl()));
+
   /** URL that failed to load — kept so a new/changed URL retries automatically. */
   private readonly failedUrl = signal<string | null>(null);
 
@@ -68,6 +75,5 @@ export class Avatar {
 
   protected onImageError(): void {
     this.failedUrl.set(this.imageUrl() ?? null);
-    console.log('Avatar name:', this.name());
   }
 }

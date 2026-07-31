@@ -1,0 +1,71 @@
+name: Deploy frontend to Azure Static Web Apps
+
+# Every push to main redeploys the site; pull requests get their own throwaway preview
+# environment, which is torn down again when the PR closes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+env:
+  # Angular's application builder writes the browser bundle to dist/<project>/browser.
+  # `public/staticwebapp.config.json` is copied to this folder by the build, which is where
+  # Static Web Apps expects it — that file is what makes SPA deep links work.
+  APP_ARTIFACT: dist/frontend/browser
+
+jobs:
+  build_and_deploy:
+    # `closed` only needs the teardown job below.
+    if: github.event_name == 'push' || github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    name: Build and deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          lfs: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` (not `install`) so the build uses exactly the locked dependency versions.
+      - name: Install dependencies
+        run: npm ci
+
+      # Built here rather than letting Oryx do it: this repo pins its own Node version and
+      # Angular output path, and a local failure is far easier to read than one inside the
+      # deployment container. `skip_app_build` below tells the action to just upload.
+      - name: Build (production configuration)
+        run: npx ng build --configuration production
+
+      - name: Verify the SPA fallback config shipped
+        run: |
+          test -f "${APP_ARTIFACT}/staticwebapp.config.json" \
+            || { echo "::error::staticwebapp.config.json missing from ${APP_ARTIFACT} — deep links would 404"; exit 1; }
+          test -f "${APP_ARTIFACT}/index.html" \
+            || { echo "::error::index.html missing from ${APP_ARTIFACT}"; exit 1; }
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: ${{ env.APP_ARTIFACT }}
+          skip_app_build: true
+          skip_api_build: true
+
+  close_pull_request:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close preview environment
+    steps:
+      - name: Close
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: close

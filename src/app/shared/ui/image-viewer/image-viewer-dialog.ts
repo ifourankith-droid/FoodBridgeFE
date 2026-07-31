@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import type { DialogService } from '@core/services/dialog.service';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
+import { mediaUrl } from '@shared/util/media-url';
 
 /** Data for {@link openImageDialog}: the picture and the item name shown as the heading. */
 export interface ImageViewerData {
@@ -18,7 +19,7 @@ export interface ImageViewerData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="iv-wrap">
-      <img class="iv-img" [src]="data.imageUrl" [alt]="data.title" />
+      <img class="iv-img" [src]="resolvedUrl" [alt]="data.title" />
     </div>
   `,
   styles: `
@@ -45,6 +46,13 @@ export interface ImageViewerData {
 })
 export class ImageViewerDialog {
   protected readonly data = inject<ImageViewerData>(DIALOG_DATA);
+
+  /**
+   * Absolutised against the API's origin — the API hands back `/uploads/…`, which the browser would
+   * otherwise resolve against the frontend's origin and 404 in production. Plain field, not a
+   * computed: dialog `data` is injected once and never changes.
+   */
+  protected readonly resolvedUrl = mediaUrl(this.data.imageUrl);
 }
 
 /**

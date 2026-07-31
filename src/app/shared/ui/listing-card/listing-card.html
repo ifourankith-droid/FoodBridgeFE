@@ -9,7 +9,7 @@
           aria-label="View photo"
           (click)="openImage($event)"
         >
-          <img [src]="listing().imageUrl" [alt]="listing().title" (error)="onImageError()" />
+          <img [src]="resolvedImageUrl()" [alt]="listing().title" (error)="onImageError()" />
         </button>
       } @else {
         <div class="lc-icon" [style.background]="iconBg()"><i [class]="icon()"></i></div>

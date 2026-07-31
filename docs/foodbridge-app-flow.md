@@ -469,7 +469,23 @@ demand concentrates. Read-only — spots are added implicitly at confirm-deliver
 - `source: 'Volunteer'` marks a crowd-sourced spot; badge it so admins and volunteers can tell it
   from a verified partner site.
 
-### 14.8 Volunteer verification (Pending accounts)
+### 14.8 Donor food-safety declaration (required to post a donation)
+Posting a new donation opens `features/donor/create-listing/food-safety-dialog.ts` first: a short
+plain-English checklist plus one required checkbox confirming the food is safe and its quality is the
+donor's responsibility. **Confirm & post** stays disabled until it's ticked.
+
+- **The create request only fires from inside that dialog's confirm** — never from `submit()` directly.
+  Keep it that way; the backend rejects a create without `acceptedFoodSafety: true` (400), so a
+  bypass just produces a confusing validation error.
+- The whole save (create → optional photo upload → navigate) runs through `save$()` inside the dialog,
+  so a failure keeps the dialog open with the box still ticked rather than dropping the donor back to
+  the form.
+- **Editing does not re-ask.** `PUT` omits the flag and the server preserves the original
+  `foodSafetyAcceptedAtUtc`.
+- Keep the wording plain and in that one component — it's read by someone standing in a kitchen, and a
+  wall of legalese gets clicked through, which defeats the point.
+
+### 14.9 Volunteer verification (Pending accounts)
 A volunteer registers as `accountStatus: 'Pending'` and **cannot claim or collect** until an admin has
 reviewed their photo ID and selfie. They *can* sign in, browse listings and see the hotspot map.
 
