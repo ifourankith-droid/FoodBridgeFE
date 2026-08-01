@@ -368,7 +368,7 @@ export class MyListings {
         ? [
           {
             id: 'cancel-listing',
-            label: 'Cancel donation',
+            label: 'Cancel',
             icon: 'fa-solid fa-ban',
             variant: 'danger',
             align: 'start',
@@ -449,7 +449,7 @@ export class MyListings {
     const confirmed = await this.dialog.confirm({
       title: 'Cancel this donation?',
       message: `"${l.title}" will be withdrawn and volunteers will no longer see it. This can't be undone.`,
-      confirmLabel: 'Cancel donation',
+      confirmLabel: 'Cancel',
       cancelLabel: 'Keep it',
       confirmVariant: 'danger',
       icon: 'fa-solid fa-ban',
