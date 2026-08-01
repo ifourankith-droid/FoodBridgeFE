@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { catchError, EMPTY, tap } from 'rxjs';
 import { Dispute } from '@core/models/dispute.model';
 import { DialogService } from '@core/services/dialog.service';
@@ -7,7 +7,8 @@ import { ToastService } from '@core/services/toast.service';
 import { FbButton } from '@shared/ui/button/button';
 import { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 import { ResolveDisputeDialog } from './resolve-dispute-dialog';
 
@@ -24,19 +25,38 @@ import { ResolveDisputeDialog } from './resolve-dispute-dialog';
  */
 @Component({
   selector: 'app-disputes',
-  imports: [FbButton, EmptyState, PageWrapper],
+  imports: [FbButton, EmptyState, ListingLayout, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="Dispute Resolution"
       description="Investigate and resolve issues raised on deliveries."
       [hasActions]="true"
+      [hasAside]="true"
+      [hasFilters]="false"
+      gridClass=""
     >
       <div pageActions>
         <app-button variant="outline" icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="load()">
           Refresh
         </app-button>
       </div>
+
+      <!-- Summary: the open queue is the number that matters; resolved is context. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-gavel"
+        [loading]="loading()"
+        loadingText="Loading disputes…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ open().length }}</span>
+          open {{ open().length === 1 ? 'dispute' : 'disputes' }}
+        </span>
+        <span subtitle class="text-muted">
+          {{ resolved().length }} resolved · {{ resolvedPct() }}% resolution rate
+        </span>
+      </app-summary-header>
 
       <h6 class="section-title">
         Open
@@ -118,7 +138,55 @@ import { ResolveDisputeDialog } from './resolve-dispute-dialog';
           </div>
         }
       }
-    </app-page-wrapper>
+
+      <!-- Sticky stats aside — same shape as the donor/volunteer listing pages. -->
+      <ng-container aside>
+        <!-- Resolution: total raised in the ring, open highlighted alongside. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Resolution</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="resolvedRing()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ totalDisputes() }}</span>
+                <span class="fb-ring-cap">raised</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Open</div>
+              <div class="font-bold text-xl text-orange-600">{{ open().length }}</div>
+              @if (totalDisputes()) {
+                <div class="text-success-deep text-xs font-semibold mt-1">
+                  {{ resolvedPct() }}% resolved
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakdown: open vs resolved share. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Breakdown</div>
+          @if (totalDisputes()) {
+            <div class="flex flex-col gap-1">
+              @for (b of breakdown(); track b.label) {
+                <div class="fb-cat-row">
+                  <span class="fb-cat-icon" [style.color]="b.color">
+                    <i [class]="b.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ b.label }}</span>
+                  <span class="fb-cat-count">{{ b.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="b.pct" [style.background]="b.color"></span>
+                  </span>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">No disputes have been raised.</p>
+          }
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
     .dispute-card {
@@ -165,6 +233,44 @@ export class Disputes {
   protected readonly loading = signal(true);
   /** Id of the dispute whose resolve call is in flight. */
   protected readonly busyId = signal<string | null>(null);
+
+  // ---- Aside stats ----
+  protected readonly totalDisputes = computed(() => this.open().length + this.resolved().length);
+
+  protected readonly resolvedPct = computed(() => {
+    const total = this.totalDisputes();
+    return total ? Math.round((this.resolved().length / total) * 100) : 0;
+  });
+
+  /** Resolved (success) then open (orange) share, for the ring background. */
+  protected readonly resolvedRing = computed(() => {
+    const total = this.totalDisputes();
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    const pct = this.resolvedPct();
+    return `conic-gradient(var(--fb-success) 0 ${pct}%, var(--fb-orange) ${pct}% 100%)`;
+  });
+
+  protected readonly breakdown = computed(() => {
+    const total = this.totalDisputes() || 1;
+    return [
+      {
+        label: 'Open',
+        icon: 'fa-solid fa-circle-exclamation',
+        color: '#ea580c',
+        count: this.open().length,
+        pct: Math.round((this.open().length / total) * 100),
+      },
+      {
+        label: 'Resolved',
+        icon: 'fa-solid fa-circle-check',
+        color: '#059669',
+        count: this.resolved().length,
+        pct: Math.round((this.resolved().length / total) * 100),
+      },
+    ].filter((b) => b.count > 0);
+  });
 
   constructor() {
     this.load();

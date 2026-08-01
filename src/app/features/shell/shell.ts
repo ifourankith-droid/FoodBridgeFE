@@ -2,13 +2,14 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { LocationBroadcastService } from '@core/realtime/location-broadcast.service';
 import { LayoutService } from '@core/services/layout.service';
+import { FbScrollLock } from '@shared/directives/scroll-lock.directive';
 import { Sidebar } from './sidebar/sidebar';
 import { Topbar } from './topbar/topbar';
 import { VerificationBanner } from './verification-banner/verification-banner';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, Sidebar, Topbar, VerificationBanner],
+  imports: [RouterOutlet, Sidebar, Topbar, VerificationBanner, FbScrollLock],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
   styles: `

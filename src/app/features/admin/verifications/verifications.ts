@@ -6,7 +6,8 @@ import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { mediaUrl } from '@shared/util/media-url';
 import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 
@@ -42,13 +43,15 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
  */
 @Component({
   selector: 'app-verifications',
-  imports: [FbButton, EmptyState, PageWrapper],
+  imports: [FbButton, EmptyState, ListingLayout, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="Verifications"
       description="Approve or suspend volunteers and organizations. A recipient receives no food until verified."
       [hasActions]="true"
+      [hasAside]="true"
+      gridClass=""
     >
       <div pageActions>
         <app-button variant="outline" icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="load()">
@@ -56,27 +59,45 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
         </app-button>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 mb-2">
-        <span class="small-label !mb-0 mr-1">Status</span>
-        @for (f of STATUS_FILTERS; track f.id) {
-          <button
-            [class]="(status() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
-            (click)="setStatus(f.id)"
-          >
-            {{ f.label }}
-          </button>
-        }
-      </div>
-      <div class="flex flex-wrap items-center gap-2 mb-4">
-        <span class="small-label !mb-0 mr-1">Role</span>
-        @for (f of ROLE_FILTERS; track f.id) {
-          <button
-            [class]="(role() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
-            (click)="setRole(f.id)"
-          >
-            {{ f.label }}
-          </button>
-        }
+      <!-- Summary: how many accounts are in view + how many need the admin now. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-user-shield"
+        [loading]="loading()"
+        loadingText="Loading accounts…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ totalAccounts() }}</span>
+          {{ totalAccounts() === 1 ? 'account' : 'accounts' }} in view
+        </span>
+        <span subtitle class="text-muted">
+          {{ readyCount() }} ready to review · {{ pendingCount() }} pending
+        </span>
+      </app-summary-header>
+
+      <div filters>
+        <div class="flex flex-wrap items-center gap-2 w-full">
+          <span class="small-label !mb-0 mr-1">Status</span>
+          @for (f of STATUS_FILTERS; track f.id) {
+            <button
+              [class]="(status() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
+              (click)="setStatus(f.id)"
+            >
+              {{ f.label }}
+            </button>
+          }
+        </div>
+        <div class="flex flex-wrap items-center gap-2 w-full">
+          <span class="small-label !mb-0 mr-1">Role</span>
+          @for (f of ROLE_FILTERS; track f.id) {
+            <button
+              [class]="(role() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
+              (click)="setRole(f.id)"
+            >
+              {{ f.label }}
+            </button>
+          }
+        </div>
       </div>
 
       @if (loading()) {
@@ -155,38 +176,55 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
               <div class="flex gap-2">
                 @switch (a.accountStatus) {
                   @case ('Verified') {
-                    <button
-                      class="btn-fb-outline flex-1 !py-2 !text-sm !text-red-600"
-                      [disabled]="busyId() === a.id"
-                      (click)="suspend(a)"
-                    >
-                      <i class="fa-solid mr-1" [class]="spinOr(a.id, 'fa-ban')"></i>Suspend
-                    </button>
+                    <span class="flex-1">
+                      <app-button
+                        size="sm"
+                        variant="danger"
+                        icon="fa-solid fa-ban"
+                        [block]="true"
+                        [loading]="busyId() === a.id"
+                        (clicked)="suspend(a)"
+                      >
+                        Suspend
+                      </app-button>
+                    </span>
                   }
                   @case ('Pending') {
-                    <button
-                      class="btn-fb flex-1 !py-2 !text-sm"
-                      [disabled]="busyId() === a.id"
-                      (click)="verify(a)"
-                    >
-                      <i class="fa-solid mr-1" [class]="spinOr(a.id, 'fa-check')"></i>Verify
-                    </button>
-                    <button
-                      class="btn-fb-outline flex-1 !py-2 !text-sm !text-red-600"
-                      [disabled]="busyId() === a.id"
-                      (click)="suspend(a)"
-                    >
-                      Reject
-                    </button>
+                    <span class="flex-1">
+                      <app-button
+                        size="sm"
+                        icon="fa-solid fa-check"
+                        [block]="true"
+                        [loading]="busyId() === a.id"
+                        (clicked)="verify(a)"
+                      >
+                        Verify
+                      </app-button>
+                    </span>
+                    <span class="flex-1">
+                      <app-button
+                        size="sm"
+                        variant="outline"
+                        [block]="true"
+                        [disabled]="busyId() === a.id"
+                        (clicked)="suspend(a)"
+                      >
+                        Reject
+                      </app-button>
+                    </span>
                   }
                   @default {
-                    <button
-                      class="btn-fb flex-1 !py-2 !text-sm"
-                      [disabled]="busyId() === a.id"
-                      (click)="verify(a)"
-                    >
-                      <i class="fa-solid mr-1" [class]="spinOr(a.id, 'fa-rotate-left')"></i>Reinstate
-                    </button>
+                    <span class="flex-1">
+                      <app-button
+                        size="sm"
+                        icon="fa-solid fa-rotate-left"
+                        [block]="true"
+                        [loading]="busyId() === a.id"
+                        (clicked)="verify(a)"
+                      >
+                        Reinstate
+                      </app-button>
+                    </span>
                   }
                 }
               </div>
@@ -205,7 +243,100 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
           />
         </div>
       }
-    </app-page-wrapper>
+
+      <!-- Sticky stats aside — same shape as the donor/volunteer listing pages. -->
+      <ng-container aside>
+        <!-- Status donut: accounts in view split by status, ready-to-review alongside. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Account status</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="donutBackground()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ totalAccounts() }}</span>
+                <span class="fb-ring-cap">in view</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Ready to review</div>
+              <div class="font-bold text-xl text-primary-deep">{{ readyCount() }}</div>
+              @if (pendingCount()) {
+                <div class="text-primary-deep text-xs font-semibold mt-1">
+                  {{ pendingCount() }} pending
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- By account status — each row jumps the status filter. -->
+        <div class="card-fb p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-bold text-sm">By status</div>
+            @if (status() !== 'all') {
+              <button type="button" class="fb-link text-xs" (click)="setStatus('all')">Clear</button>
+            }
+          </div>
+          @if (totalAccounts()) {
+            <div class="flex flex-col gap-1">
+              @for (s of statusCounts(); track s.id) {
+                <button
+                  type="button"
+                  class="fb-cat-row"
+                  [class.is-active]="status() === s.id"
+                  [attr.aria-pressed]="status() === s.id"
+                  (click)="setStatus(s.id)"
+                >
+                  <span class="fb-cat-icon" [style.color]="s.color">
+                    <i [class]="s.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ s.label }}</span>
+                  <span class="fb-cat-count">{{ s.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="s.pct" [style.background]="s.color"></span>
+                  </span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">No accounts match these filters.</p>
+          }
+        </div>
+
+        <!-- By role — each row jumps the role filter. -->
+        <div class="card-fb p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-bold text-sm">By role</div>
+            @if (role() !== 'all') {
+              <button type="button" class="fb-link text-xs" (click)="setRole('all')">Clear</button>
+            }
+          </div>
+          @if (totalAccounts()) {
+            <div class="flex flex-col gap-1">
+              @for (r of roleCounts(); track r.id) {
+                <button
+                  type="button"
+                  class="fb-cat-row"
+                  [class.is-active]="role() === r.id"
+                  [attr.aria-pressed]="role() === r.id"
+                  (click)="setRole(r.id)"
+                >
+                  <span class="fb-cat-icon" [style.color]="r.color">
+                    <i [class]="r.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ r.label }}</span>
+                  <span class="fb-cat-count">{{ r.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="r.pct" [style.background]="r.color"></span>
+                  </span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">No accounts match these filters.</p>
+          }
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: [
     `
@@ -275,6 +406,61 @@ export class Verifications {
         a.name.localeCompare(b.name),
     ),
   );
+
+  // ---- Aside stats (over the currently loaded, server-filtered set) ----
+  protected readonly totalAccounts = computed(() => this.accounts().length);
+  protected readonly readyCount = computed(
+    () => this.accounts().filter((a) => a.isReadyForReview).length,
+  );
+  protected readonly pendingCount = computed(
+    () => this.accounts().filter((a) => a.accountStatus === 'Pending').length,
+  );
+
+  private readonly STATUS_META: readonly { id: StatusFilter; label: string; icon: string; color: string }[] = [
+    { id: 'Pending', label: 'Pending', icon: 'fa-solid fa-hourglass-half', color: '#d97706' },
+    { id: 'Verified', label: 'Verified', icon: 'fa-solid fa-circle-check', color: '#059669' },
+    { id: 'Suspended', label: 'Suspended', icon: 'fa-solid fa-ban', color: '#dc2626' },
+  ];
+
+  protected readonly statusCounts = computed(() => {
+    const rows = this.accounts();
+    const total = rows.length || 1;
+    return this.STATUS_META.map((d) => {
+      const count = rows.filter((a) => a.accountStatus === d.id).length;
+      return { ...d, count, pct: Math.round((count / total) * 100) };
+    }).filter((r) => r.count > 0);
+  });
+
+  /** Multi-segment conic gradient for the status donut. */
+  protected readonly donutBackground = computed(() => {
+    const total = this.totalAccounts();
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    let acc = 0;
+    const segments = this.statusCounts().map((s) => {
+      const start = (acc / total) * 100;
+      acc += s.count;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
+
+  private readonly ROLE_META: readonly { id: RoleFilter; label: string; icon: string; color: string }[] = [
+    { id: 'Volunteer', label: 'Volunteers', icon: 'fa-solid fa-hand-holding-heart', color: 'var(--fb-primary)' },
+    { id: 'Recipient', label: 'Organizations', icon: 'fa-solid fa-building', color: '#2258c7' },
+    { id: 'Donor', label: 'Donors', icon: 'fa-solid fa-user', color: '#7c3aed' },
+  ];
+
+  protected readonly roleCounts = computed(() => {
+    const rows = this.accounts();
+    const total = rows.length || 1;
+    return this.ROLE_META.map((d) => {
+      const count = rows.filter((a) => a.role === d.id).length;
+      return { ...d, count, pct: Math.round((count / total) * 100) };
+    }).filter((r) => r.count > 0);
+  });
 
   protected missingCount(a: AdminAccount): number {
     return a.requiredDocumentTypes.filter((t) => !a.submittedDocumentTypes.includes(t)).length;
@@ -408,10 +594,6 @@ export class Verifications {
         ? list.filter((a) => a.id !== updated.id)
         : list.map((a) => (a.id === updated.id ? updated : a)),
     );
-  }
-
-  protected spinOr(id: string, icon: string): string {
-    return this.busyId() === id ? 'fa-spinner fa-spin' : icon;
   }
 
   protected initial(name: string): string {

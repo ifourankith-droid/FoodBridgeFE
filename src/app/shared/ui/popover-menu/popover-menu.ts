@@ -15,6 +15,7 @@ import {
   TemplateRef,
   viewChild,
 } from '@angular/core';
+import { FbScrollLock } from '@shared/directives/scroll-lock.directive';
 
 /**
  * Marks the `<ng-template>` that holds a popover's panel body. Kept as a
@@ -64,7 +65,7 @@ export class FbPopoverHeader {
  */
 @Component({
   selector: 'app-popover-menu',
-  imports: [NgClass, NgTemplateOutlet],
+  imports: [NgClass, NgTemplateOutlet, FbScrollLock],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:pointerdown)': 'onDocumentPointerDown($event)',
@@ -89,6 +90,7 @@ export class FbPopoverHeader {
     <dialog
       #dlg
       class="pm-dialog"
+      [fbScrollLock]="open() && asModal()"
       [attr.aria-label]="ariaLabel() || null"
       (cancel)="onDialogCancel($event)"
       (click)="onDialogClick($event)"

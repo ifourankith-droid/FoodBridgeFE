@@ -6,7 +6,8 @@ import { ToastService } from '@core/services/toast.service';
 import { BarChart, BarChartPoint } from '@shared/ui/bar-chart/bar-chart';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { downloadCsv } from '@shared/util/csv';
 
 interface StatTile {
@@ -43,13 +44,16 @@ const MONTHS = [
  */
 @Component({
   selector: 'app-admin-reports',
-  imports: [DecimalPipe, BarChart, FbButton, EmptyState, PageWrapper],
+  imports: [DecimalPipe, BarChart, FbButton, EmptyState, ListingLayout, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="Platform Reports"
       description="CSR-ready, platform-wide impact for funders and partners."
       [hasActions]="true"
+      [hasAside]="true"
+      [hasFilters]="false"
+      gridClass=""
     >
       <ng-container pageActions>
           <app-button variant="outline" icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="load()">
@@ -63,6 +67,23 @@ const MONTHS = [
           Export CSV
         </app-button>
       </ng-container>
+
+      <!-- Summary: the headline impact figure. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-bowl-food"
+        [loading]="loading()"
+        loadingText="Loading the platform report…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ report()?.totalMealsDonated ?? 0 | number }}</span>
+          meals rescued
+        </span>
+        <span subtitle class="text-muted">
+          {{ report()?.totalDeliveries ?? 0 | number }} deliveries ·
+          {{ report()?.totalUsers ?? 0 | number }} users
+        </span>
+      </app-summary-header>
 
       @if (loading()) {
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -128,7 +149,55 @@ const MONTHS = [
           />
         </div>
       }
-    </app-page-wrapper>
+
+      <!-- Sticky stats aside — same shape as the donor/volunteer listing pages. -->
+      <ng-container aside>
+        <!-- Efficiency: the single ratio funders ask about most. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Meals per delivery</div>
+          <div class="flex items-center gap-4">
+            <div class="me-metric">
+              <span class="me-metric-num">{{ mealsPerDelivery() }}</span>
+              <span class="me-metric-cap">avg</span>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Deliveries</div>
+              <div class="font-bold text-xl text-primary-deep">
+                {{ report()?.totalDeliveries ?? 0 | number }}
+              </div>
+              @if (bestMonth(); as b) {
+                <div class="text-primary-deep text-xs font-semibold mt-1 truncate">
+                  <i class="fa-solid fa-arrow-trend-up mr-1"></i>Best {{ b.label }}
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Totals recap: the figures a partner deck quotes. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Platform totals</div>
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalUsers ?? 0 | number }}</div>
+              <div class="text-muted text-[11px]">Users</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalCertificates ?? 0 | number }}</div>
+              <div class="text-muted text-[11px]">Certificates</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalMealsDonated ?? 0 | number }}</div>
+              <div class="text-muted text-[11px]">Meals</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalDeliveries ?? 0 | number }}</div>
+              <div class="text-muted text-[11px]">Deliveries</div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
     .stat-hint {
@@ -136,6 +205,35 @@ const MONTHS = [
       font-size: 11px;
       line-height: 1.45;
       color: var(--fb-muted);
+      opacity: 0.85;
+    }
+
+    /* Aside "meals per delivery" tile — the primary-gradient square used across
+       the listing asides (cf. leaderboard's "your rank" tile). */
+    .me-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 74px;
+      height: 74px;
+      flex-shrink: 0;
+      border-radius: 20px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--fb-primary), var(--fb-primary-deep));
+      box-shadow: 0 10px 24px var(--fb-glow-primary-deep);
+    }
+    .me-metric-num {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .me-metric-cap {
+      margin-top: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
       opacity: 0.85;
     }
   `,
@@ -166,6 +264,15 @@ export class AdminReports {
     }
     const best = series.reduce((a, b) => (b.value > a.value ? b : a));
     return { label: fullMonthLabel(best.period), value: best.value };
+  });
+
+  /** Meals rescued per completed delivery — the efficiency figure for the aside. */
+  protected readonly mealsPerDelivery = computed(() => {
+    const r = this.report();
+    if (!r || !r.totalDeliveries) {
+      return '0';
+    }
+    return (r.totalMealsDonated / r.totalDeliveries).toFixed(1);
   });
 
   protected readonly tiles = computed<StatTile[]>(() => {

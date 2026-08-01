@@ -10,7 +10,8 @@ import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { FbInput } from '@shared/ui/input/input';
 import { LocationPicker } from '@shared/ui/location-picker/location-picker';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 
 /**
  * Admin CRUD for the fallback drop-off points.
@@ -23,13 +24,16 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
  */
 @Component({
   selector: 'app-dropoff-locations',
-  imports: [ReactiveFormsModule, FbButton, FbInput, LocationPicker, EmptyState, PageWrapper, FbAutofocus],
+  imports: [ReactiveFormsModule, FbButton, FbInput, LocationPicker, EmptyState, ListingLayout, SummaryHeader, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="Drop-off Locations"
       description="Fallback points a volunteer takes food to when no NGO can be matched."
       [hasActions]="true"
+      [hasAside]="true"
+      [hasFilters]="false"
+      gridClass=""
     >
       <ng-container pageActions>
         <app-button variant="outline" icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="load()">
@@ -43,6 +47,22 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
           {{ formOpen() ? 'Cancel' : 'Add location' }}
         </app-button>
       </ng-container>
+
+      <!-- Summary: how many points are live vs retired. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-map-location-dot"
+        [loading]="loading()"
+        loadingText="Loading drop-off locations…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ activeCount() }}</span>
+          active {{ activeCount() === 1 ? 'location' : 'locations' }}
+        </span>
+        <span subtitle class="text-muted">
+          {{ retiredCount() }} retired · {{ locations().length }} total
+        </span>
+      </app-summary-header>
 
       <!-- The whole point of the table: no active rows → no fallback. Say so. -->
       @if (!loading() && !activeCount()) {
@@ -148,21 +168,26 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
                 }
               </div>
               @if (l.isActive) {
-                <button
-                  class="btn-fb-outline w-full !py-2 !text-sm !text-red-600"
-                  [disabled]="busyId() === l.id"
-                  (click)="setActive(l, false)"
+                <app-button
+                  size="sm"
+                  variant="danger"
+                  icon="fa-solid fa-ban"
+                  [block]="true"
+                  [loading]="busyId() === l.id"
+                  (clicked)="setActive(l, false)"
                 >
-                  <i class="fa-solid mr-1" [class]="busyId() === l.id ? 'fa-spinner fa-spin' : 'fa-ban'"></i>Retire
-                </button>
+                  Retire
+                </app-button>
               } @else {
-                <button
-                  class="btn-fb w-full !py-2 !text-sm"
-                  [disabled]="busyId() === l.id"
-                  (click)="setActive(l, true)"
+                <app-button
+                  size="sm"
+                  icon="fa-solid fa-rotate-left"
+                  [block]="true"
+                  [loading]="busyId() === l.id"
+                  (clicked)="setActive(l, true)"
                 >
-                  <i class="fa-solid mr-1" [class]="busyId() === l.id ? 'fa-spinner fa-spin' : 'fa-rotate-left'"></i>Reactivate
-                </button>
+                  Reactivate
+                </app-button>
               }
             </div>
           }
@@ -179,7 +204,77 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
           />
         </div>
       }
-    </app-page-wrapper>
+
+      <!-- Sticky stats aside — same shape as the donor/volunteer listing pages. -->
+      <ng-container aside>
+        <!-- Coverage: total points in the ring, active share highlighted. A zero
+             active count is the failure state the page warns about, so surface it. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Coverage</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="donutBackground()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ locations().length }}</span>
+                <span class="fb-ring-cap">points</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Active</div>
+              <div
+                class="font-bold text-xl"
+                [class.text-primary-deep]="activeCount() > 0"
+                [class.text-red-600]="activeCount() === 0"
+              >
+                {{ activeCount() }}
+              </div>
+              @if (activeCount() === 0) {
+                <div class="text-red-600 text-[11px] font-semibold mt-1">
+                  No fallback available
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Status share: active vs retired. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">By status</div>
+          @if (locations().length) {
+            <div class="flex flex-col gap-1">
+              @for (b of statusBreakdown(); track b.label) {
+                <div class="fb-cat-row">
+                  <span class="fb-cat-icon" [style.color]="b.color">
+                    <i [class]="b.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ b.label }}</span>
+                  <span class="fb-cat-count">{{ b.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="b.pct" [style.background]="b.color"></span>
+                  </span>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">No locations added yet.</p>
+          }
+        </div>
+
+        <!-- Where they came from. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Added by</div>
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div class="fb-impact-num">{{ adminAdded() }}</div>
+              <div class="text-muted text-[11px]">Admin</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ volunteerAdded() }}</div>
+              <div class="text-muted text-[11px]">Volunteers</div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
     .warn-strip {
@@ -248,6 +343,53 @@ export class DropOffLocations {
   protected readonly activeCount = computed(
     () => this.locations().filter((l) => l.isActive).length,
   );
+
+  // ---- Aside stats ----
+  protected readonly retiredCount = computed(
+    () => this.locations().length - this.activeCount(),
+  );
+  protected readonly volunteerAdded = computed(
+    () => this.locations().filter((l) => l.source === 'Volunteer').length,
+  );
+  protected readonly adminAdded = computed(
+    () => this.locations().length - this.volunteerAdded(),
+  );
+
+  protected readonly statusBreakdown = computed(() => {
+    const total = this.locations().length || 1;
+    return [
+      {
+        label: 'Active',
+        icon: 'fa-solid fa-circle-check',
+        color: '#059669',
+        count: this.activeCount(),
+        pct: Math.round((this.activeCount() / total) * 100),
+      },
+      {
+        label: 'Retired',
+        icon: 'fa-solid fa-ban',
+        color: '#64748b',
+        count: this.retiredCount(),
+        pct: Math.round((this.retiredCount() / total) * 100),
+      },
+    ].filter((b) => b.count > 0);
+  });
+
+  /** Multi-segment conic gradient for the coverage donut (active vs retired). */
+  protected readonly donutBackground = computed(() => {
+    const total = this.locations().length;
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    let acc = 0;
+    const segments = this.statusBreakdown().map((s) => {
+      const start = (acc / total) * 100;
+      acc += s.count;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
 
   /** Active first, then newest — the list reads as "what's live right now". */
   protected readonly sorted = computed(() =>

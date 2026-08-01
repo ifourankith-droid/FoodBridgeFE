@@ -10,5 +10,5 @@
 </div>
 
 @if (layout.sidebarOpen()) {
-  <div class="fb-backdrop" (click)="layout.closeSidebar()"></div>
+  <div class="fb-backdrop" [fbScrollLock]="true" (click)="layout.closeSidebar()"></div>
 }

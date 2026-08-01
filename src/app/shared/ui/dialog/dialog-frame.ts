@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { isObservable } from 'rxjs';
 import { FbButton } from '@shared/ui/button/button';
+import { FbScrollLock } from '@shared/directives/scroll-lock.directive';
 import { DialogRef } from './dialog-ref';
 import { DIALOG_DATA, DialogAction } from './dialog.model';
 
@@ -27,12 +28,13 @@ import { DIALOG_DATA, DialogAction } from './dialog.model';
  */
 @Component({
   selector: 'app-dialog-frame',
-  imports: [FbButton],
+  imports: [FbButton, FbScrollLock],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <dialog
       #el
       class="dlg"
+      [fbScrollLock]="true"
       [attr.data-size]="config().size"
       [attr.aria-labelledby]="config().header ? titleId : null"
       (cancel)="onEscape($event)"
