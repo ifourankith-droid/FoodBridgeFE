@@ -13,7 +13,7 @@ const plugin = require('tailwindcss/plugin');
    DEFAULT_THEME is only the pre-hydration fallback baked into
    :root — i.e. what a brand-new visitor sees before they pick.
    ============================================================ */
-const DEFAULT_THEME = 'terracotta';
+const DEFAULT_THEME = 'teal';
 
 /* Hex is the single source of truth; every channel triplet, dark-mode tint
    and gradient below is derived from it.
@@ -35,11 +35,12 @@ const THEMES = {
     accent: { DEFAULT: '#ff7a3d', deep: '#e8621f', soft: '#ffeee3' },
   },
 
-  // Teal + amber accent. Fresh, hygienic and trustworthy; the amber keeps
-  // food warmth. 5.5:1 on white text.
+  // Teal + pink accent (the default palette). Fresh, hygienic and trustworthy;
+  // the pink is a lively complementary counterpoint to the teal for avatars,
+  // badges and gradients. 5.5:1 on white text.
   teal: {
     primary: { DEFAULT: '#0f766e', deep: '#134e4a', bright: '#2dd4bf', soft: '#f0fdfa' },
-    accent: { DEFAULT: '#f59e0b', deep: '#b45309', soft: '#fffbeb' },
+    accent: { DEFAULT: '#ec4899', deep: '#be185d', soft: '#fdf2f8' },
   },
 
   // Navy + gold accent. Institutional credibility — reads well to municipal

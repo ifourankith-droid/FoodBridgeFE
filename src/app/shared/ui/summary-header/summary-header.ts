@@ -24,7 +24,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex items-center gap-3' },
   template: `
-    <div class="stat-icon !mb-0 bg-gradient-primary">
+    <!-- shrink-0: the tile is a flex item, so without it a long heading squashes
+         the 48px square into an oval on narrow screens. -->
+    <div class="stat-icon shrink-0 !mb-0 bg-gradient-primary">
       <i [class]="icon()" aria-hidden="true"></i>
     </div>
     <div class="min-w-0">

@@ -22,7 +22,7 @@ export const BRAND_THEMES = [
 export type BrandTheme = (typeof BRAND_THEMES)[number]['id'];
 
 /** Must match DEFAULT_THEME in tailwind.config.js. */
-const DEFAULT_BRAND: BrandTheme = 'terracotta';
+const DEFAULT_BRAND: BrandTheme = 'teal';
 
 function isBrandTheme(value: unknown): value is BrandTheme {
   return BRAND_THEMES.some((t) => t.id === value);
@@ -47,7 +47,7 @@ export class ThemeService {
    * a literal colour rather than a CSS var (canvas, SVG data URIs, the
    * theme-color meta tag). Re-read whenever the palette changes.
    */
-  readonly primaryHex = signal('#d87757');
+  readonly primaryHex = signal('#0f766e');
 
   constructor() {
     // Apply + persist whenever the preference changes (runs once on init too).

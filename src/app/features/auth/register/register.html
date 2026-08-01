@@ -71,11 +71,14 @@
         (addressResolved)="onAddressResolved($event)"
       />
       <form [formGroup]="form" class="grid grid-cols-12 gap-3">
+        <!-- Phones: City takes the full row, State and Pincode split it 50/50 —
+             at a quarter row each they were too narrow to read. From sm up the
+             three share one row as 6/3/3. -->
         <app-input class="col-span-12" formControlName="address" placeholder="Address" />
-        <app-input class="col-span-6" formControlName="city" placeholder="City" />
-        <app-input class="col-span-3" formControlName="state" placeholder="State" />
+        <app-input class="col-span-12 sm:col-span-6" formControlName="city" placeholder="City" />
+        <app-input class="col-span-6 sm:col-span-3" formControlName="state" placeholder="State" />
         <app-input
-          class="col-span-3"
+          class="col-span-6 sm:col-span-3"
           type="tel"
           [maxlength]="6"
           inputmode="numeric"
@@ -102,7 +105,7 @@
 
     <!-- Step 3: Full name & number -->
     @case (3) {
-      @if (!mobileVerified()) {
+      @if (!showVerifiedScreen()) {
         <p class="small-label mb-3">Step 3 — Your details</p>
         <form [formGroup]="form" class="grid grid-cols-12 gap-3" fbAutofocus>
           <app-input
@@ -155,7 +158,11 @@
             [maxlength]="10"
             placeholder="98765 43210"
             [required]="true"
-            hint="We'll text a 6-digit verification code. Standard rates may apply."
+            [hint]="
+              preVerified()
+                ? 'Verified — this is the number you signed in with.'
+                : 'We\'ll text a 6-digit verification code. Standard rates may apply.'
+            "
             [error]="err('mobile')"
             formControlName="mobile"
           />
@@ -165,14 +172,26 @@
             <app-button variant="outline" [block]="true" (clicked)="stepBack(2)">Back</app-button>
           </div>
           <div class="flex-1">
-            <app-button
-              icon="fa-solid fa-paper-plane"
-              [block]="true"
-              [loading]="sendingOtp()"
-              (clicked)="sendCode()"
-            >
-              {{ sendingOtp() ? 'Sending…' : 'Send OTP' }}
-            </app-button>
+            @if (preVerified()) {
+              <app-button
+                icon="fa-solid fa-circle-check"
+                iconPosition="right"
+                [block]="true"
+                [loading]="submitting()"
+                (clicked)="submitDetails()"
+              >
+                {{ submitting() ? 'Creating account…' : 'Create account' }}
+              </app-button>
+            } @else {
+              <app-button
+                icon="fa-solid fa-paper-plane"
+                [block]="true"
+                [loading]="sendingOtp()"
+                (clicked)="sendCode()"
+              >
+                {{ sendingOtp() ? 'Sending…' : 'Send OTP' }}
+              </app-button>
+            }
           </div>
         </div>
       } @else {

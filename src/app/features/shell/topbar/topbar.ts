@@ -8,13 +8,26 @@ import { RoleBadge } from '@shared/ui/role-badge/role-badge';
 import { Avatar } from '@shared/ui/avatar/avatar';
 import { AvailabilityService } from '@core/services/availability.service';
 import { LayoutService } from '@core/services/layout.service';
-import { ToastService } from '@core/services/toast.service';
 import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-toggle';
+import {
+  FbPopoverHeader,
+  FbPopoverMenu,
+  FbPopoverPanel,
+} from '@shared/ui/popover-menu/popover-menu';
 import { NotificationBell } from '../notification-bell/notification-bell';
 
 @Component({
   selector: 'app-topbar',
-  imports: [RouterLink, RoleBadge, Avatar, NotificationBell, AvailabilityToggle],
+  imports: [
+    RouterLink,
+    RoleBadge,
+    Avatar,
+    NotificationBell,
+    AvailabilityToggle,
+    FbPopoverMenu,
+    FbPopoverPanel,
+    FbPopoverHeader,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './topbar.html',
   styles: `
@@ -29,7 +42,13 @@ import { NotificationBell } from '../notification-bell/notification-bell';
       position: sticky;
       top: 0;
       z-index: 1020;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+    }
+    @media (max-width: 640px) {
+      .topbar {
+        padding: 10px 12px;
+        gap: 8px;
+      }
     }
     .search-box {
       position: relative;
@@ -64,9 +83,57 @@ import { NotificationBell } from '../notification-bell/notification-bell';
       border-color: var(--fb-primary);
       background: var(--fb-primary-soft);
     }
-    .dropdown-panel.left-0 {
-      right: auto;
-      left: 0;
+    /* On phones the pickup selector collapses to an icon-only button so the
+       topbar fits on a single line. */
+    @media (max-width: 640px) {
+      .addr-btn {
+        width: 42px;
+        padding: 0;
+        justify-content: center;
+        max-width: none;
+      }
+      .addr-label,
+      .addr-caret {
+        display: none;
+      }
+    }
+    /* Dark-mode toggle button — matches the .btn-icon affordance, hidden on
+       phones (the same toggle lives in the profile menu there). */
+    .theme-btn {
+      display: inline-flex;
+    }
+    @media (max-width: 640px) {
+      .theme-btn {
+        display: none;
+      }
+    }
+    /* Dark-mode switch shown inside the profile dropdown. */
+    .fb-switch {
+      width: 40px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--fb-line);
+      border: 0;
+      position: relative;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s ease;
+    }
+    .fb-switch.on {
+      background: var(--fb-primary);
+    }
+    .fb-switch .knob {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s ease;
+    }
+    .fb-switch.on .knob {
+      transform: translateX(18px);
     }
     .addr-item {
       display: flex;
@@ -127,17 +194,6 @@ import { NotificationBell } from '../notification-bell/notification-bell';
       transform: translateY(-50%);
       color: var(--fb-muted);
     }
-    .dropdown-panel {
-      position: absolute;
-      right: 0;
-      top: 52px;
-      z-index: 1040;
-      background: var(--fb-surface);
-      border: 1px solid var(--fb-line);
-      border-radius: 16px;
-      box-shadow: var(--fb-shadow-lg);
-      padding: 8px;
-    }
     .dropdown-item {
       display: flex;
       align-items: center;
@@ -152,21 +208,15 @@ import { NotificationBell } from '../notification-bell/notification-bell';
       background: var(--fb-primary-soft);
       color: var(--fb-primary-deep);
     }
-    .menu-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1035;
-    }
   `,
 })
 export class Topbar {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly toast = inject(ToastService);
   protected readonly layout = inject(LayoutService);
+  protected readonly theme = inject(ThemeService);
   protected readonly availability = inject(AvailabilityService);
   protected readonly pickup = inject(PickupAddressService);
-  protected readonly theme = inject(ThemeService);
 
   protected readonly notifOpen = signal(false);
   protected readonly menuOpen = signal(false);
@@ -218,11 +268,6 @@ export class Topbar {
   protected go(view: string): void {
     this.closeMenus();
     this.router.navigate([APP_ROUTES.app, view]);
-  }
-
-  protected helpSoon(): void {
-    this.closeMenus();
-    this.toast.show('fa-solid fa-circle-info', 'Help center coming soon');
   }
 
   protected logout(): void {

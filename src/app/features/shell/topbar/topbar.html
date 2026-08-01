@@ -11,23 +11,30 @@
         <i class="fa-solid fa-bars"></i>
       </button>
     </div>
-    <div class="search-box hidden lg:block">
-      <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="text" placeholder="Search listings, NGOs, volunteers..." />
-    </div>
-
     <!-- Pickup address selector (donors) -->
     @if (isDonor()) {
-      <div class="relative">
-        <button type="button" class="addr-btn" (click)="toggleAddr()" title="Pickup address">
+      <app-popover-menu
+        [open]="addrOpen()"
+        (openChange)="addrOpen.set($event)"
+        align="start"
+        panelClass="w-[300px]"
+        ariaLabel="Pickup address"
+      >
+        <button
+          fbTrigger
+          type="button"
+          class="addr-btn"
+          (click)="toggleAddr()"
+          title="Pickup address"
+        >
           <i class="fa-solid fa-location-dot text-primary"></i>
-          <span class="truncate max-w-[120px] sm:max-w-[180px]">{{
+          <span class="addr-label truncate max-w-[120px] sm:max-w-[180px]">{{
             pickup.selected()?.label || 'Set pickup address'
           }}</span>
-          <i class="fa-solid fa-chevron-down text-[10px] text-muted"></i>
+          <i class="fa-solid fa-chevron-down text-[10px] text-muted addr-caret"></i>
         </button>
-        @if (addrOpen()) {
-          <div class="dropdown-panel left-0 w-[300px]">
+        <ng-template fbPanel>
+          <div class="p-2">
             <div class="px-2 py-1 small-label">Pickup address</div>
             @for (a of pickup.addresses(); track a.id) {
               <div
@@ -63,17 +70,17 @@
               <span class="sr-only">(opens in a new tab)</span>
             </a>
           </div>
-        }
-      </div>
+        </ng-template>
+      </app-popover-menu>
     }
   </div>
 
-  <div class="flex items-center gap-4">
+  <div class="flex items-center gap-2 sm:gap-4">
     @if (availability.appliesToCurrentUser()) {
       <app-availability-toggle />
     }
 
-    <!-- Light / dark theme -->
+    <!-- Light / dark theme (hidden on phones — also available in the profile menu) -->
     <button
       type="button"
       class="btn-icon theme-btn"
@@ -89,13 +96,28 @@
     <app-notification-bell [open]="notifOpen()" (openChange)="onNotifOpenChange($event)" />
 
     <!-- Profile -->
-    <div class="relative">
-      <button type="button" class="avatar-btn" (click)="toggleMenu()">
+    <app-popover-menu
+      [open]="menuOpen()"
+      (openChange)="menuOpen.set($event)"
+      align="end"
+      panelClass="w-[220px]"
+      ariaLabel="Account menu"
+    >
+      <button fbTrigger type="button" class="avatar-btn" (click)="toggleMenu()">
         <app-avatar [name]="userName()" [imageUrl]="avatarUrl()" [size]="40" />
       </button>
-      @if (menuOpen()) {
-        <div class="dropdown-panel w-[220px]">
-          <div class="px-3 pt-2 pb-2.5 border-b border-line mb-1">
+      <!-- Who's signed in, at the left of the modal's header bar (phones only). -->
+      <ng-template fbPanelHeader>
+        <div class="min-w-0">
+          <div class="font-semibold text-sm truncate">{{ userName() }}</div>
+          <app-role-badge class="mt-1" [role]="role()" size="sm" />
+        </div>
+      </ng-template>
+      <ng-template fbPanel>
+        <div class="p-2">
+          <!-- Hidden below sm: the modal's header bar already shows this, and the
+               popover-menu switches to that modal at exactly the same width. -->
+          <div class="hidden sm:block px-3 pt-2 pb-2.5 border-b border-line mb-1">
             <div class="font-semibold text-sm truncate">{{ userName() }}</div>
             <app-role-badge class="mt-1.5" [role]="role()" size="sm" />
           </div>
@@ -105,19 +127,24 @@
           <a class="dropdown-item" (click)="go('settings')"
             ><i class="fa-solid fa-gear"></i>Settings</a
           >
-          <a class="dropdown-item" (click)="helpSoon()">
-            <i class="fa-solid fa-circle-question"></i>Help
-          </a>
+          <button
+            type="button"
+            class="dropdown-item w-full justify-between"
+            role="switch"
+            [attr.aria-checked]="theme.darkMode()"
+            (click)="theme.toggle()"
+          >
+            <span class="flex items-center gap-2">
+              <i class="fa-solid" [class]="theme.darkMode() ? 'fa-sun' : 'fa-moon'"></i>Dark mode
+            </span>
+            <span class="fb-switch" [class.on]="theme.darkMode()"><span class="knob"></span></span>
+          </button>
           <hr class="my-1 border-line" />
           <a class="dropdown-item !text-red-600" (click)="logout()">
             <i class="fa-solid fa-right-from-bracket"></i>Logout
           </a>
         </div>
-      }
-    </div>
+      </ng-template>
+    </app-popover-menu>
   </div>
-
-  @if (notifOpen() || menuOpen() || addrOpen()) {
-    <div class="menu-backdrop" (click)="closeMenus()"></div>
-  }
 </div>

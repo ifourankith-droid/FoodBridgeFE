@@ -3,10 +3,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  Directive,
   ElementRef,
   forwardRef,
   inject,
-  Injector,
   input,
   output,
   signal,
@@ -14,6 +14,7 @@ import {
 } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { ClockService } from '@core/services/clock.service';
+import { FbPopoverMenu, FbPopoverPanel } from '@shared/ui/popover-menu/popover-menu';
 import {
   clampToRange,
   DatePickerMode,
@@ -32,8 +33,22 @@ import {
 
 let uid = 0;
 
-/** Roughly the panel's tallest rendering — used to decide whether to flip up. */
-const PANEL_MAX_HEIGHT = 400;
+/**
+ * Scrolls this element's currently-selected cell (`.is-sel`) into view once,
+ * after it first renders. The time columns live inside the picker's `fbPanel`
+ * template — stamped by {@link FbPopoverMenu} into a separate view — so the
+ * component's own `viewChild` can't reach them; this runs in the template's own
+ * context instead, which works wherever the panel is mounted.
+ */
+@Directive({ selector: '[fbScrollActiveIntoView]' })
+export class FbScrollActiveIntoView {
+  constructor() {
+    const el = inject<ElementRef<HTMLElement>>(ElementRef);
+    afterNextRender(() => {
+      el.nativeElement.querySelector('.is-sel')?.scrollIntoView({ block: 'center' });
+    });
+  }
+}
 
 const PLACEHOLDERS: Record<DatePickerMode, string> = {
   date: 'Select date',
@@ -71,13 +86,10 @@ interface HourOption {
 @Component({
   selector: 'app-date-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FbPopoverMenu, FbPopoverPanel, FbScrollActiveIntoView],
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => FbDatePicker), multi: true },
   ],
-  host: {
-    '(document:pointerdown)': 'onDocumentPointerDown($event)',
-    '(document:keydown.escape)': 'onEscape()',
-  },
   template: `
     @if (label()) {
       <label class="small-label mb-2 block" [attr.for]="id">
@@ -85,9 +97,16 @@ interface HourOption {
       </label>
     }
 
-    <div class="wrap">
+    <app-popover-menu
+      [open]="open()"
+      (openChange)="onPanelOpenChange($event)"
+      align="start"
+      [ariaLabel]="label() || resolvedPlaceholder()"
+      [estimatedHeight]="420"
+    >
       <button
         #trigger
+        fbTrigger
         type="button"
         [id]="id"
         class="fb-trigger"
@@ -111,15 +130,8 @@ interface HourOption {
         <i class="fa-solid fa-chevron-down fb-trigger-chevron" aria-hidden="true"></i>
       </button>
 
-      @if (open()) {
-        <div
-          #panel
-          class="fb-popover panel"
-          [class.drop-up]="dropUp()"
-          [class.align-end]="alignEnd()"
-          role="dialog"
-          [attr.aria-label]="label() || resolvedPlaceholder()"
-        >
+      <ng-template fbPanel>
+        <div class="panel">
           <div class="panes">
             @if (mode() !== 'time') {
               <div class="cal">
@@ -208,7 +220,7 @@ interface HourOption {
               <div class="time">
                 <div class="time-head">Time</div>
                 <div class="cols">
-                  <div #hourCol class="col" role="listbox" aria-label="Hour">
+                  <div fbScrollActiveIntoView class="col" role="listbox" aria-label="Hour">
                     @for (h of hourOptions(); track h.value) {
                       <button
                         type="button"
@@ -223,7 +235,7 @@ interface HourOption {
                       </button>
                     }
                   </div>
-                  <div #minuteCol class="col" role="listbox" aria-label="Minute">
+                  <div fbScrollActiveIntoView class="col" role="listbox" aria-label="Minute">
                     @for (m of minuteOptions(); track m.value) {
                       <button
                         type="button"
@@ -271,8 +283,8 @@ interface HourOption {
             <button type="button" class="foot-btn is-primary" (click)="close(true)">Done</button>
           </div>
         </div>
-      }
-    </div>
+      </ng-template>
+    </app-popover-menu>
 
     @if (error()) {
       <p class="fb-msg error">{{ error() }}</p>
@@ -284,25 +296,61 @@ interface HourOption {
     :host {
       display: block;
     }
-    .wrap {
-      position: relative;
-    }
 
-    /* Trigger chrome and the panel's frame come from .fb-trigger / .fb-popover
-       in styles.scss — only the picker-specific bits live here. */
+    /* Trigger chrome comes from .fb-trigger in styles.scss and the panel's frame
+       from <app-popover-menu> — only the picker-specific bits live here. */
     .panel {
       width: max-content;
       max-width: calc(100vw - 24px);
-    }
-    .panel.align-end {
-      left: auto;
-      right: 0;
     }
     /* Calendar and time sit side by side, and stack when the field is narrow
        or the viewport can't take both. */
     .panes {
       display: flex;
       flex-wrap: wrap;
+    }
+
+    /* At <=640px the picker renders inside the <app-popover-menu> mobile modal.
+       Fill the modal width and stack the calendar over the time, so nothing
+       overflows sideways and the panel fits without its own scrollbars. */
+    @media (max-width: 640px) {
+      .panel {
+        width: 100%;
+        max-width: none;
+      }
+      .panes {
+        flex-direction: column;
+      }
+      /* Full width, but capped and centred so the cells don't blow up (which
+         would make the calendar tall enough to force a modal scroll). */
+      .cal {
+        width: 100%;
+        max-width: 320px;
+        margin-inline: auto;
+        box-sizing: border-box;
+      }
+      /* Stacked: match the calendar's width and move the divider to the top. */
+      .time {
+        width: 100%;
+        max-width: 320px;
+        margin-inline: auto;
+        border-left: 0;
+        border-top: 1px solid var(--fb-line);
+      }
+      /* Hour / minute spread to fill the row; the AM·PM column stays compact.
+         A shorter scroll window keeps the whole modal on screen. */
+      .cols {
+        gap: 8px;
+      }
+      .col {
+        flex: 1;
+        width: auto;
+        max-height: 150px;
+      }
+      .col.is-narrow {
+        flex: 0 0 auto;
+        width: 58px;
+      }
     }
 
     /* ---- Calendar ---- */
@@ -466,13 +514,6 @@ interface HourOption {
       flex: 1;
       min-width: 150px;
     }
-    /* Once the panes stack, the divider belongs on top instead of the side. */
-    @media (max-width: 420px) {
-      .time {
-        border-left: 0;
-        border-top: 1px solid var(--fb-line);
-      }
-    }
     .time-head {
       font-size: 10.5px;
       font-weight: 700;
@@ -534,8 +575,6 @@ interface HourOption {
   `,
 })
 export class FbDatePicker implements ControlValueAccessor {
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly injector = inject(Injector);
   private readonly clock = inject(ClockService);
 
   readonly mode = input<DatePickerMode>('date');
@@ -566,8 +605,6 @@ export class FbDatePicker implements ControlValueAccessor {
   protected readonly value = signal('');
   protected readonly disabled = signal(false);
   protected readonly open = signal(false);
-  protected readonly dropUp = signal(false);
-  protected readonly alignEnd = signal(false);
   protected readonly view = signal<'days' | 'months'>('days');
   protected readonly viewYear = signal(new Date().getFullYear());
   protected readonly viewMonth = signal(new Date().getMonth());
@@ -581,9 +618,6 @@ export class FbDatePicker implements ControlValueAccessor {
   private readonly anchor = signal(new Date());
 
   private readonly triggerBtn = viewChild<ElementRef<HTMLButtonElement>>('trigger');
-  private readonly panelEl = viewChild<ElementRef<HTMLElement>>('panel');
-  private readonly hourCol = viewChild<ElementRef<HTMLElement>>('hourCol');
-  private readonly minuteCol = viewChild<ElementRef<HTMLElement>>('minuteCol');
 
   // Locale-derived and fixed for the session.
   protected readonly months = monthLabels('short').map((label, index) => ({ label, index }));
@@ -709,31 +743,17 @@ export class FbDatePicker implements ControlValueAccessor {
     this.viewMonth.set(focus.getMonth());
     this.view.set('days');
 
-    const rect = this.host.nativeElement.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom;
-    this.dropUp.set(below < PANEL_MAX_HEIGHT && rect.top > below);
-    this.alignEnd.set(false);
-
+    // <app-popover-menu> owns positioning (drop direction) and the small-screen
+    // modal; scrolling the selected time into view is handled per-column by
+    // fbScrollActiveIntoView, since the panel renders in the wrapper's view.
     this.open.set(true);
     this.opened.emit();
-    afterNextRender(
-      () => {
-        this.keepPanelOnScreen();
-        this.scrollTimeIntoView();
-      },
-      { injector: this.injector },
-    );
   }
 
-  /**
-   * The panel sizes to its content, so on a field near the right edge it can
-   * run off screen. Measured after render rather than estimated, then flipped
-   * to right-aligned if it doesn't fit.
-   */
-  private keepPanelOnScreen(): void {
-    const panel = this.panelEl()?.nativeElement;
-    if (panel && panel.getBoundingClientRect().right > window.innerWidth - 8) {
-      this.alignEnd.set(true);
+  /** The wrapper closed itself (click-away, Esc, backdrop) → sync our state. */
+  protected onPanelOpenChange(open: boolean): void {
+    if (!open) {
+      this.close();
     }
   }
 
@@ -844,16 +864,6 @@ export class FbDatePicker implements ControlValueAccessor {
     }
   }
 
-  protected onEscape(): void {
-    this.close(true);
-  }
-
-  protected onDocumentPointerDown(event: PointerEvent): void {
-    if (this.open() && !this.host.nativeElement.contains(event.target as Node)) {
-      this.close();
-    }
-  }
-
   private outOfRange(date: Date): boolean {
     const min = this.minDate();
     const max = this.maxDate();
@@ -864,13 +874,6 @@ export class FbDatePicker implements ControlValueAccessor {
   private hourOutOfRange(hour: number): boolean {
     const day = this.working();
     return this.outOfRange(withTime(day, hour, 59)) && this.outOfRange(withTime(day, hour, 0));
-  }
-
-  private scrollTimeIntoView(): void {
-    for (const col of [this.hourCol(), this.minuteCol()]) {
-      const selected = col?.nativeElement.querySelector('.is-sel');
-      selected?.scrollIntoView({ block: 'center' });
-    }
   }
 
   private commit(date: Date): void {

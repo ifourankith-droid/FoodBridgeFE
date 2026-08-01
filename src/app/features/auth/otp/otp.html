@@ -6,7 +6,7 @@
     >.
   </p>
 
-  <div class="flex justify-center gap-1 mb-3" fbAutofocus>
+  <div class="otp-row mb-3" fbAutofocus>
     @for (control of otp.controls; track $index) {
       <input
         #box
@@ -22,11 +22,13 @@
     }
   </div>
 
-  <div class="flex gap-2 mt-6">
-    <div class="flex-1">
+  <!-- Stacked on phones: both labels are nowrap, so side by side they overflow a
+       narrow viewport and scroll the page sideways. -->
+  <div class="flex flex-col sm:flex-row gap-2 mt-6">
+    <div class="flex-1 min-w-0">
       <app-button variant="outline" (click)="back()" [block]="true"> Change number </app-button>
     </div>
-    <div class="flex-1">
+    <div class="flex-1 min-w-0">
       <app-button
         type="button"
         [disabled]="verifying()"

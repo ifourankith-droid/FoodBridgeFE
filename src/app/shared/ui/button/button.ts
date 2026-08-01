@@ -33,7 +33,9 @@ export type FbIconPosition = 'left' | 'right';
       }
 
       @if (!iconOnly()) {
-        <ng-content />
+        <!-- Wrapped so a compact action row can hide the label with CSS; a bare
+             projected text node can't be targeted. -->
+        <span class="fb-btn__label"><ng-content /></span>
       }
 
       @if (!loading() && icon() && iconPosition() === 'right' && !iconOnly()) {
@@ -56,6 +58,7 @@ export type FbIconPosition = 'left' | 'right';
       width: 100%;
     }
     .fb-btn {
+      position: relative;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -107,6 +110,39 @@ export type FbIconPosition = 'left' | 'right';
     .fb-btn.icon-only.lg {
       width: 50px;
       height: 50px;
+    }
+
+    /* Compact action rows (.fb-compact-actions, e.g. PageWrapper's header) drop
+       the label on phones so the buttons fit beside the page title. Only a
+       button carrying an icon can collapse — see can-collapse in classes() —
+       and the label is clipped rather than display:none'd so it still supplies
+       the button's accessible name. */
+    @media (max-width: 640px) {
+      :host-context(.fb-compact-actions) .fb-btn.can-collapse {
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        aspect-ratio: 1;
+      }
+      :host-context(.fb-compact-actions) .fb-btn.can-collapse.sm {
+        width: 34px;
+        height: 34px;
+      }
+      :host-context(.fb-compact-actions) .fb-btn.can-collapse.lg {
+        width: 46px;
+        height: 46px;
+      }
+      :host-context(.fb-compact-actions) .fb-btn.can-collapse i {
+        margin: 0;
+      }
+      :host-context(.fb-compact-actions) .fb-btn.can-collapse .fb-btn__label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
     }
 
     /* Variants */
@@ -164,6 +200,11 @@ export class FbButton {
     const cls = ['fb-btn', this.variant(), this.size()];
     if (this.iconOnly()) {
       cls.push('icon-only');
+    } else if (this.icon() && !this.block()) {
+      // Marks the button as safe to collapse to its icon inside a
+      // .fb-compact-actions row: without an icon it would say nothing, and a
+      // block button is meant to fill its container.
+      cls.push('can-collapse');
     }
     return cls.join(' ');
   });

@@ -57,11 +57,31 @@ export type ImageSource = 'both' | 'upload' | 'camera';
     <!-- ---------- Preview ---------- -->
     @if (previewSrc(); as src) {
       <figure class="preview" [class.is-avatar]="shape() === 'avatar'">
-        <img [src]="src" [alt]="previewAlt()" />
+        @if (isDocument()) {
+          <!-- A PDF in an <img> is just a broken image, so documents get a tile
+               with their icon and file name, linked so it can still be checked. -->
+          <a
+            class="doc"
+            [href]="src"
+            target="_blank"
+            rel="noopener"
+            title="Open in a new tab"
+          >
+            <span class="zone-icon doc-icon">
+              <i class="fa-regular fa-file-pdf" aria-hidden="true"></i>
+            </span>
+            <span class="doc-name">{{ documentName() }}</span>
+          </a>
+        } @else {
+          <img [src]="src" [alt]="previewAlt()" />
+        }
 
         <figcaption class="bar">
           <span class="meta">
-            <i class="fa-regular fa-image" aria-hidden="true"></i>
+            <i
+              [class]="isDocument() ? 'fa-regular fa-file-pdf' : 'fa-regular fa-image'"
+              aria-hidden="true"
+            ></i>
             <span class="meta-text">{{ metaLabel() }}</span>
           </span>
           <span class="bar-actions">
@@ -304,6 +324,31 @@ export type ImageSource = 'both' | 'upload' | 'camera';
       max-height: 260px;
       object-fit: cover;
     }
+    /* ---------- Document (non-image) preview ----------
+       The tile borrows .zone-icon for the square and only re-tints it, so this
+       stays within the component's style budget. */
+    .doc {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      /* Colour and underline: preflight already makes anchors inherit both. */
+      background: var(--fb-bg);
+    }
+    .doc-icon {
+      margin: 0;
+      background: rgb(239 68 68 / 0.12);
+      color: #dc2626;
+      box-shadow: none;
+    }
+    .doc-name {
+      min-width: 0;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .preview.is-avatar {
       width: 132px;
       height: 132px;
@@ -478,7 +523,13 @@ export class ImagePicker {
     if (supplied) {
       return supplied;
     }
-    return this.cameraOnly() ? 'Take a photo' : 'Click to upload, or drop an image here';
+    if (this.cameraOnly()) {
+      return 'Take a photo';
+    }
+    // "image" would be wrong where a PDF is allowed too (e.g. an ID proof).
+    return this.accept().toLowerCase().includes('application/')
+      ? 'Click to upload, or drop a file here'
+      : 'Click to upload, or drop an image here';
   });
 
   protected readonly zoneSub = computed(() =>
@@ -493,11 +544,38 @@ export class ImagePicker {
     this.selected() ? `Selected image: ${this.selected()!.name}` : 'Current image',
   );
 
+  /**
+   * True when what we're previewing isn't an image — an ID proof may be a PDF.
+   * Those can't be shown in an `<img>`, so the template renders a file tile
+   * instead of a broken image.
+   */
+  protected readonly isDocument = computed(() => {
+    const file = this.selected();
+    if (file) {
+      return !file.type.toLowerCase().startsWith('image/');
+    }
+    const url = this.existingUrl();
+    return !!url && /\.pdf(?:[?#]|$)/i.test(url);
+  });
+
+  /** File name for the document tile; a stored file has only its URL to go on. */
+  protected readonly documentName = computed(() => {
+    const file = this.selected();
+    if (file) {
+      return file.name;
+    }
+    const url = this.existingUrl() ?? '';
+    return decodeURIComponent(url.split(/[?#]/)[0].split('/').pop() || '') || 'Document';
+  });
+
   protected readonly message = computed(() => this.validationError() || this.error());
 
   protected readonly metaLabel = computed(() => {
     const file = this.selected();
-    return file ? `${file.name} · ${formatBytes(file.size)}` : 'Current image';
+    if (file) {
+      return `${file.name} · ${formatBytes(file.size)}`;
+    }
+    return this.isDocument() ? 'Current document' : 'Current image';
   });
 
   /** "JPG or PNG" from the accept list, for the hint line. */
@@ -646,7 +724,7 @@ export class ImagePicker {
     }
     const max = this.maxSizeMb() * 1024 * 1024;
     if (file.size > max) {
-      return `That image is ${formatBytes(file.size)} — the limit is ${this.maxSizeMb()} MB.`;
+      return `That file is ${formatBytes(file.size)} — the limit is ${this.maxSizeMb()} MB.`;
     }
     return '';
   }

@@ -88,7 +88,7 @@ import { AvailabilityService } from '@core/services/availability.service';
       transition: transform 0.18s ease;
     }
     .is-on .track {
-      background: var(--fb-success);
+      background: var(--fb-primary);
     }
     .is-on .knob {
       transform: translateX(14px);
@@ -105,36 +105,34 @@ import { AvailabilityService } from '@core/services/availability.service';
     }
 
     /* ---- Topbar pill ---- */
+    /* No bordered container: the switch itself is the whole affordance, so the
+       button is transparent with no outer padding. */
     .pill {
       display: inline-flex;
       align-items: center;
       gap: 9px;
       height: 42px;
-      padding: 0 15px 0 12px;
-      border-radius: 999px;
-      border: 1px solid var(--fb-line);
-      background: var(--fb-surface);
+      padding: 0;
+      border: 0;
+      background: transparent;
       font-size: 13px;
       font-weight: 600;
       color: var(--fb-muted);
       cursor: pointer;
-      transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        color 0.15s ease;
-    }
-    .pill:hover:not(:disabled) {
-      border-color: var(--fb-muted);
+      transition: color 0.15s ease;
     }
     .pill.is-on {
-      /* An alpha wash, not --fb-success-soft: this has to composite over the
-         topbar surface in both themes. */
-      background: rgb(var(--fb-success-rgb) / 0.12);
-      border-color: rgb(var(--fb-success-rgb) / 0.45);
-      color: var(--fb-success-deep);
+      color: var(--fb-primary-deep);
     }
-    .pill.is-on:hover:not(:disabled) {
-      background: rgb(var(--fb-success-rgb) / 0.18);
+    /* On phones drop the Available/Offline label so the topbar stays on one
+       line — the switch itself still shows the state. */
+    @media (max-width: 640px) {
+      .pill {
+        gap: 0;
+      }
+      .pill-label {
+        display: none;
+      }
     }
     .pill:focus-visible,
     .sw:focus-visible {
@@ -165,8 +163,8 @@ import { AvailabilityService } from '@core/services/availability.service';
         background 0.15s ease;
     }
     .row-wrap.is-on {
-      border-color: rgb(var(--fb-success-rgb) / 0.4);
-      background: rgb(var(--fb-success-rgb) / 0.07);
+      border-color: rgb(var(--fb-primary-rgb) / 0.4);
+      background: rgb(var(--fb-primary-rgb) / 0.07);
     }
     .row-title {
       font-size: 13.5px;
@@ -206,9 +204,9 @@ import { AvailabilityService } from '@core/services/availability.service';
         color 0.15s ease;
     }
     .sw.is-on {
-      background: rgb(var(--fb-success-rgb) / 0.12);
-      border-color: rgb(var(--fb-success-rgb) / 0.45);
-      color: var(--fb-success-deep);
+      background: rgb(var(--fb-primary-rgb) / 0.12);
+      border-color: rgb(var(--fb-primary-rgb) / 0.45);
+      color: var(--fb-primary-deep);
     }
     .sw-label {
       white-space: nowrap;

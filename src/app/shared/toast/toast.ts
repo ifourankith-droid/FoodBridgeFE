@@ -43,22 +43,26 @@ import { ToastService } from '@core/services/toast.service';
     </div>
   `,
   styles: `
-    .fb-toast-stack {
-      position: fixed;
-      top: 22px;
-      right: 22px;
-      z-index: 2000;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      width: min(380px, calc(100vw - 32px));
-      pointer-events: none;
+    /* The stack is fixed, so the host has no in-flow content of its own — but as
+       a default-inline element it still takes part in app.html's layout and can
+       leave a stray strip in the page. display:contents removes the host box
+       while keeping the aria-live region mounted — an @if wrapper would stop
+       screen readers announcing the first toast. */
+    :host {
+      display: contents;
     }
 
-    /* Promoted into the top layer via the popover API so it clears native
-       <dialog> modals (which the z-index alone can't). Reset the popover UA
-       chrome (inset/margin/border/background) back to the fixed top-right stack. */
-    .fb-toast-stack:popover-open {
+    /* The stack is promoted into the top layer via the popover API so it clears
+       native <dialog> modals (which a z-index alone can't). That brings the
+       popover UA chrome with it — inset:0, margin:auto, a solid border, 0.25em
+       padding and a Canvas (white) background — so all of it is reset here, on
+       the base rule. It has to be the base rule and not :popover-open, because
+       the display below overrides the UA rule that hides a closed popover — so
+       a *closed* stack rendered too, and with only top/right set the UA's
+       left/bottom plus margin:auto centred that empty white box — the stray
+       white line across the middle of the page. */
+    .fb-toast-stack {
+      position: fixed;
       inset: auto;
       top: 22px;
       right: 22px;
@@ -67,7 +71,21 @@ import { ToastService } from '@core/services/toast.service';
       border: 0;
       background: transparent;
       overflow: visible;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: min(380px, calc(100vw - 32px));
       height: auto;
+      pointer-events: none;
+    }
+
+    /* Keep a closed popover hidden, since the display above outranks the UA
+       rule that would have done it. Browsers without :popover-open drop this
+       whole rule as invalid — which is right, as they never open the popover
+       and fall back to the z-index above. */
+    .fb-toast-stack:not(:popover-open) {
+      display: none;
     }
 
     .fb-toast {

@@ -53,6 +53,17 @@ export class Register {
   protected readonly recipientType = signal<RecipientType>('Individual');
   protected readonly mobileVerified = this.auth.mobileVerified;
 
+  /**
+   * True when the mobile was already verified before the wizard started (the user
+   * verified via the login flow, then chose to register). In that case step 3 shows
+   * the details form with the phone locked — the user only fills in their name —
+   * rather than the post-OTP "Mobile verified" success screen.
+   */
+  protected readonly preVerified = signal(false);
+
+  /** Show the "Mobile verified → Create account" screen only after an in-wizard OTP round-trip. */
+  protected readonly showVerifiedScreen = computed(() => this.mobileVerified() && !this.preVerified());
+
   /** Per-field validation messages shown beneath each input (Angular control state → view). */
   protected readonly fieldErrors = signal<Record<string, string>>({});
   protected readonly locationError = signal('');
@@ -107,6 +118,13 @@ export class Register {
       const reachedDetailsStep =
         this.auth.mobileVerified() || (draft.latitude !== null && draft.longitude !== null);
       this.step.set(reachedDetailsStep ? 3 : 2);
+    }
+
+    // Verified via the login flow (new number) before any details were entered →
+    // lock the phone and let the user complete the wizard, filling in just their name.
+    if (this.auth.mobileVerified() && !draft?.name?.trim()) {
+      this.preVerified.set(true);
+      this.form.controls.mobile.disable();
     }
 
     // Capacity is required only for recipients — toggle its validators with the role.
@@ -207,6 +225,24 @@ export class Register {
         this.toast.show('fa-solid fa-triangle-exclamation', err.message || 'Could not send the OTP');
       },
     });
+  }
+
+  /**
+   * Pre-verified flow (step 3): mobile is already verified, so validate the
+   * details (name + capacity for recipients) and create the account directly —
+   * no OTP round-trip needed.
+   */
+  protected submitDetails(): void {
+    const fields = this.isRecipient() ? ['name', 'capacity'] : ['name'];
+    this.validating.set(fields);
+    fields.forEach((f) => this.form.get(f)?.markAsTouched());
+    this.refreshErrors(fields);
+    const firstError = this.firstError(fields);
+    if (firstError) {
+      this.toast.show('fa-solid fa-triangle-exclamation', firstError);
+      return;
+    }
+    this.finish();
   }
 
   protected onLocationPicked(pos: FbLatLng): void {

@@ -12,6 +12,11 @@ import { NotificationService } from '@core/services/notification.service';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 import { NotificationFilters } from '@shared/ui/notification-filters/notification-filters';
 import { NotificationItem } from '@shared/ui/notification-item/notification-item';
+import {
+  FbPopoverHeader,
+  FbPopoverMenu,
+  FbPopoverPanel,
+} from '@shared/ui/popover-menu/popover-menu';
 
 /**
  * The topbar bell: unread badge, and a dropdown previewing the latest few
@@ -22,35 +27,54 @@ import { NotificationItem } from '@shared/ui/notification-item/notification-item
  */
 @Component({
   selector: 'app-notification-bell',
-  imports: [RouterLink, EmptyState, NotificationFilters, NotificationItem],
+  imports: [
+    RouterLink,
+    EmptyState,
+    NotificationFilters,
+    NotificationItem,
+    FbPopoverMenu,
+    FbPopoverPanel,
+    FbPopoverHeader,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'relative' },
   template: `
-    <button
-      type="button"
-      class="btn-icon"
-      [attr.aria-expanded]="open()"
-      [attr.aria-label]="bellLabel()"
-      (click)="toggle()"
+    <app-popover-menu
+      [open]="open()"
+      (openChange)="open.set($event)"
+      align="end"
+      panelClass="w-[380px]"
+      ariaLabel="Notifications"
     >
-      <i class="fa-solid fa-bell"></i>
-      @if (notifications.unreadCount()) {
-        <span class="notif-badge">{{ badgeText() }}</span>
-      }
-    </button>
+      <button
+        fbTrigger
+        type="button"
+        class="btn-icon"
+        [attr.aria-expanded]="open()"
+        [attr.aria-label]="bellLabel()"
+        (click)="toggle()"
+      >
+        <i class="fa-solid fa-bell"></i>
+        @if (notifications.unreadCount()) {
+          <span class="notif-badge">{{ badgeText() }}</span>
+        }
+      </button>
 
-    @if (open()) {
-      <div class="panel" role="dialog" aria-label="Notifications">
-        <header class="panel-head">
-          <div class="min-w-0">
+      <!-- On phones the panel's own header would sit under the modal's header
+           bar, so the title and count move up into the bar (left) and the head
+           row below keeps only Mark all read. -->
+      <ng-template fbPanelHeader>
+        <div class="min-w-0">
+          <h2 class="panel-title">Notifications</h2>
+          <p class="panel-sub">{{ unreadSummary() }}</p>
+        </div>
+      </ng-template>
+
+      <ng-template fbPanel>
+      <div class="notif">
+        <header class="panel-head" [class.is-quiet]="!notifications.unreadCount()">
+          <div class="panel-head-copy min-w-0">
             <h2 class="panel-title">Notifications</h2>
-            <p class="panel-sub">
-              {{
-                notifications.unreadCount()
-                  ? notifications.unreadCount() + ' unread'
-                  : "You're all caught up"
-              }}
-            </p>
+            <p class="panel-sub">{{ unreadSummary() }}</p>
           </div>
           @if (notifications.unreadCount()) {
             <button
@@ -112,7 +136,8 @@ import { NotificationItem } from '@shared/ui/notification-item/notification-item
           </a>
         </footer>
       </div>
-    }
+      </ng-template>
+    </app-popover-menu>
   `,
   styles: `
     .notif-badge {
@@ -132,28 +157,10 @@ import { NotificationItem } from '@shared/ui/notification-item/notification-item
       justify-content: center;
     }
 
-    /* ---- Dropdown panel ---- */
-    .panel {
-      position: absolute;
-      right: 0;
-      top: 52px;
-      z-index: 1040;
-      width: 380px;
+    /* ---- Panel body (frame + positioning come from <app-popover-menu>) ---- */
+    .notif {
       display: flex;
       flex-direction: column;
-      background: var(--fb-surface);
-      border: 1px solid var(--fb-line);
-      border-radius: 18px;
-      box-shadow: var(--fb-shadow-lg);
-      overflow: hidden;
-    }
-    /* Never wider than the viewport on a phone, where the topbar bell sits only
-       a few pixels from the right edge. */
-    @media (max-width: 420px) {
-      .panel {
-        width: calc(100vw - 24px);
-        right: -8px;
-      }
     }
 
     .panel-head {
@@ -193,6 +200,22 @@ import { NotificationItem } from '@shared/ui/notification-item/notification-item
     .head-action:disabled {
       opacity: 0.6;
       cursor: default;
+    }
+
+    /* Phones: the modal's header bar carries the title and count, so this row is
+       left with Mark all read alone — and disappears entirely when there's
+       nothing to mark. Matches app-popover-menu's own modal breakpoint. */
+    @media (max-width: 640px) {
+      .panel-head-copy {
+        display: none;
+      }
+      .panel-head {
+        justify-content: flex-end;
+        padding: 10px 16px;
+      }
+      .panel-head.is-quiet {
+        display: none;
+      }
     }
 
     .panel-filters {
@@ -284,6 +307,12 @@ export class NotificationBell {
   protected readonly bellLabel = computed(() => {
     const count = this.notifications.unreadCount();
     return count ? `Notifications, ${count} unread` : 'Notifications';
+  });
+
+  /** Header subtitle — shared by the panel's own head and the modal's header bar. */
+  protected readonly unreadSummary = computed(() => {
+    const count = this.notifications.unreadCount();
+    return count ? `${count} unread` : "You're all caught up";
   });
 
   protected readonly emptyText = computed(() =>

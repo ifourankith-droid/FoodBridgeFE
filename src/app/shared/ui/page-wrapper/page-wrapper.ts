@@ -32,7 +32,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       </div>
 
       @if (hasActions()) {
-        <div class="page-head-actions"><ng-content select="[pageActions]" /></div>
+        <!-- fb-compact-actions is the app-wide opt-in that collapses the buttons
+             inside it to their icon on phones — FbButton reacts to it via
+             :host-context, so any other action row can use it too. -->
+        <div class="page-head-actions fb-compact-actions">
+          <ng-content select="[pageActions]" />
+        </div>
       }
     </header>
 
@@ -48,18 +53,27 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       margin-bottom: 24px;
     }
     .page-head-copy {
+      /* Grows into the space the actions don't need, and min-width:0 lets it
+         shrink so a long title wraps instead of pushing the actions off-screen. */
+      flex: 1 1 auto;
       min-width: 0;
     }
+    /* Heading and description scale with the viewport: the desktop sizes (24px /
+       16px) are the clamp ceilings, so wide screens are unchanged and phones get
+       a proportionate heading instead of one that eats three lines. */
     .page-heading {
       margin: 0;
-      font-size: 24px;
+      font-size: clamp(18px, 4.4vw, 24px);
       font-weight: 700;
       letter-spacing: -0.02em;
       line-height: 1.25;
       color: var(--fb-ink);
+      text-wrap: balance;
     }
     .page-desc {
       margin: 4px 0 0;
+      font-size: clamp(13px, 3.4vw, 16px);
+      line-height: 1.55;
       color: var(--fb-muted);
       /* Descriptions are prose — cap the measure so they stay readable on wide
          screens instead of running the full width of the content area. */
@@ -75,6 +89,22 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       flex-wrap: wrap;
       gap: 10px;
       flex-shrink: 0;
+    }
+
+    /* Phones: keep the actions on the title's line rather than letting them wrap
+       below it, which pushed the page content down by a whole button row. They
+       fit because fb-compact-actions collapses each button to its icon. */
+    @media (max-width: 640px) {
+      .page-head {
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      .page-head-actions {
+        flex-wrap: nowrap;
+        gap: 6px;
+      }
     }
   `,
 })

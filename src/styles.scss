@@ -150,12 +150,27 @@ body.fb-dialog-open {
     box-shadow: var(--fb-ring);
   }
 
-  /* OTP single-digit boxes */
+  /* OTP single-digit boxes.
+     Sized fluidly rather than fixed: six 52px boxes plus their gaps are wider
+     than a 360px phone, which scrolled the whole page sideways. Each box now
+     takes an equal share of the row (see .otp-row) and stops growing at the
+     original 52x60 on wider screens. */
   .otp-input {
-    @apply w-[52px] h-[60px] text-center text-2xl font-bold rounded-xl mx-[5px] outline-none border;
+    @apply text-center font-bold rounded-xl outline-none border;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 52px;
+    height: clamp(48px, 13vw, 60px);
+    /* Digits shrink with the box so a narrow one never clips its own text. */
+    font-size: clamp(1.05rem, 5.5vw, 1.5rem);
     background: var(--fb-surface);
     color: var(--fb-ink);
     border-color: var(--fb-line);
+  }
+  /* Row wrapper for .otp-input — caps the group so the boxes stay 52px and
+     centred on desktop instead of stretching across the card. */
+  .otp-row {
+    @apply flex justify-center gap-1.5 mx-auto w-full max-w-[380px];
   }
   .otp-input:focus {
     border-color: var(--fb-primary);
