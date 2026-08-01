@@ -41,10 +41,14 @@ export const API_ENDPOINTS = {
   listings: {
     base: 'listings',
     byId: (id: Id) => `listings/${id}`,
+    /** Lifecycle timeline for one listing — usable by any party (donor/volunteer). */
+    timeline: (id: Id) => `listings/${id}/timeline`,
     cancel: (id: Id) => `listings/${id}/cancel`,
     images: (id: Id) => `listings/${id}/images`,
     // Volunteer
     nearby: 'listings/nearby',
+    /** The signed-in volunteer's claimed listings (My Deliveries). */
+    deliveries: 'listings/deliveries',
     claim: (id: Id) => `listings/${id}/claim`,
     unclaim: (id: Id) => `listings/${id}/unclaim`,
     confirmPickup: (id: Id) => `listings/${id}/confirm-pickup`,

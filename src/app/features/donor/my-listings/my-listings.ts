@@ -2,13 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Injector, signal 
 import { Router } from '@angular/router';
 import { catchError, EMPTY, tap } from 'rxjs';
 import { APP_ROUTES, fromView } from '@core/config/app-routes';
-import {
-  ApiListingSummary,
-  DIET_LABELS,
-  DietType,
-  MealType,
-  toListingStatus,
-} from '@core/models/listing-api.model';
+import { ApiListingSummary, toListingStatus } from '@core/models/listing-api.model';
 import { ListingStatus, STATUS_ICONS, STATUS_LABELS } from '@core/models/listing.model';
 import { DonorReport } from '@core/models/report.model';
 import { DialogService } from '@core/services/dialog.service';
@@ -19,9 +13,10 @@ import { FbButton } from '@shared/ui/button/button';
 import { openRaiseDisputeDialog } from '@shared/ui/dispute-dialog/dispute-dialog';
 import { ListingCard } from '@shared/ui/listing-card/listing-card';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
-import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
-import { FbMultiSelect, FbMultiSelectOption } from '@shared/ui/multi-select/multi-select';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { ListingFilters } from '@shared/ui/listing-filters/listing-filters';
+import { appDateTime } from '@shared/util/timezone';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { ListingDetailDialog } from './listing-detail-dialog';
 
 /** Status order shown in the Status filter. */
@@ -41,201 +36,160 @@ const LOAD_LIMIT = 500;
 
 @Component({
   selector: 'app-my-listings',
-  imports: [FbButton, ListingCard, ListingGrid, FbMultiSelect, PageWrapper],
+  imports: [FbButton, ListingCard, ListingLayout, ListingFilters, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="My Donations"
       description="Track every donation from post to certificate."
       [hasActions]="true"
+      [hasAside]="true"
+      [loading]="loading()"
+      [empty]="!filtered().length"
+      emptyIcon="fa-solid fa-box-open"
+      gridClass="lg:grid-cols-2"
+      [emptyText]="hasFilters() ? 'No donations match these filters' : 'No donations yet'"
     >
       <div pageActions>
         <app-button icon="fa-solid fa-plus" (clicked)="create()">New Donation</app-button>
       </div>
 
-      <div class="grid gap-4 xl:grid-cols-3 items-start">
-        <div class="xl:col-span-2">
-          <!-- Summary card (mirrors My Deliveries): lifetime totals + the filters. -->
-          <div class="card-fb p-4 mb-4">
-            <div class="flex items-center gap-3">
-              <div
-                class="stat-icon !mb-0"
-                style="background:linear-gradient(135deg,var(--fb-primary),var(--fb-primary-deep))"
+      <!-- Summary: lifetime totals + the filters. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-box-open"
+        [loading]="loading()"
+        loadingText="Loading your donations…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ report()?.totalListings ?? 0 }}</span>
+          {{ (report()?.totalListings ?? 0) === 1 ? 'donation' : 'donations' }} posted
+        </span>
+        <span subtitle class="text-muted">
+          {{ report()?.totalMealsDonated ?? 0 }} meals donated ·
+          {{ report()?.totalCertificates ?? 0 }} certificates earned
+        </span>
+      </app-summary-header>
+
+      <app-listing-filters
+        filters
+        [showStatus]="true"
+        [showDiet]="true"
+        [showMeal]="true"
+        [status]="statusSel()"
+        (statusChange)="statusSel.set($event)"
+        [diet]="dietSel()"
+        (dietChange)="dietSel.set($event)"
+        [meal]="mealSel()"
+        (mealChange)="mealSel.set($event)"
+      />
+
+      @for (l of filtered(); track l.id) {
+        <app-listing-card [listing]="l" [hasFooter]="true">
+          <div cardFooter class="footer-actions">
+            <app-button
+              class="btn-view"
+              size="sm"
+              icon="fa fa-eye"
+              [block]="true"
+              (clicked)="openDetail(l)"
+            >
+              View
+            </app-button>
+            <!-- Kept visible but disabled once a volunteer's involved; the wrapper
+                 carries the tooltip since a disabled button can't show its own. -->
+            <span class="btn-edit" [title]="editHint(l)">
+              <app-button
+                variant="outline"
+                size="sm"
+                icon="fa-solid fa-pen"
+                [block]="true"
+                [disabled]="!canEdit(l)"
+                (clicked)="edit(l)"
               >
-                <i class="fa-solid fa-box-open"></i>
-              </div>
-              <div class="min-w-0">
-                <div class="font-bold">
-                  <span class="text-primary-deep text-2xl">{{ report()?.totalListings ?? 0 }}</span>
-                  {{ (report()?.totalListings ?? 0) === 1 ? 'donation' : 'donations' }} posted
-                </div>
-                <div class="text-muted text-xs mt-0.5">
-                  {{ report()?.totalMealsDonated ?? 0 }} meals donated ·
-                  {{ report()?.totalCertificates ?? 0 }} certificates earned
-                </div>
+                Edit
+              </app-button>
+            </span>
+          </div>
+        </app-listing-card>
+      }
+
+      <!-- Stats aside — sticky below the topbar (like the Notifications page). -->
+      <ng-container aside>
+        <!-- Status donut: how many listed, how many delivered, split by status. -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Donation status</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="donutBackground()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ totalCount() }}</span>
+                <span class="fb-ring-cap">listed</span>
               </div>
             </div>
-
-            <div class="filter-row">
-              <app-multi-select
-                icon="fa-solid fa-layer-group"
-                allLabel="All statuses"
-                [options]="statusOptions"
-                [selected]="statusSel()"
-                (selectionChange)="statusSel.set($event)"
-              />
-              <app-multi-select
-                icon="fa-solid fa-leaf"
-                allLabel="Any diet"
-                [options]="dietOptions"
-                [selected]="dietSel()"
-                (selectionChange)="dietSel.set($event)"
-              />
-              <app-multi-select
-                icon="fa-solid fa-clock"
-                allLabel="Any meal"
-                [options]="mealOptions"
-                [selected]="mealSel()"
-                (selectionChange)="mealSel.set($event)"
-              />
-              @if (hasFilters()) {
-                <app-button type="button" [iconOnly]="true" variant="outline" icon="fa-solid fa-xmark" (click)="clearFilters()">
-                  Clear
-                </app-button>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Delivered</div>
+              <div class="font-bold text-xl text-success-deep">{{ deliveredCount() }}</div>
+              @if (totalCount()) {
+                <div class="text-primary-deep text-xs font-semibold mt-1">
+                  {{ deliveredPct() }}% completed
+                </div>
               }
             </div>
           </div>
-
-          <app-listing-grid
-            [loading]="loading()"
-            [empty]="!filtered().length"
-            emptyIcon="fa-solid fa-box-open"
-            gridClass="lg:grid-cols-2"
-            [emptyText]="hasFilters() ? 'No donations match these filters' : 'No donations yet'"
-          >
-            @for (l of filtered(); track l.id) {
-              <app-listing-card [listing]="l" [hasFooter]="true">
-                <div cardFooter class="footer-actions">
-                  <app-button
-                    class="btn-view"
-                    size="sm"
-                    icon="fa fa-eye"
-                    [block]="true"
-                    (clicked)="openDetail(l)"
-                  >
-                    View
-                  </app-button>
-                  <!-- Kept visible but disabled once a volunteer's involved; the wrapper
-                       carries the tooltip since a disabled button can't show its own. -->
-                  <span class="btn-edit" [title]="editHint(l)">
-                    <app-button
-                      variant="outline"
-                      size="sm"
-                      icon="fa-solid fa-pen"
-                      [block]="true"
-                      [disabled]="!canEdit(l)"
-                      (clicked)="edit(l)"
-                    >
-                      Edit
-                    </app-button>
-                  </span>
-                </div>
-              </app-listing-card>
-            }
-          </app-listing-grid>
         </div>
 
-        <!-- Stats aside — sticky below the topbar (like the Notifications page). -->
-        <aside class="flex flex-col gap-4 xl:sticky xl:top-[84px]">
-          <!-- Status donut: how many listed, how many delivered, split by status. -->
-          <div class="card-fb p-5">
-            <div class="font-bold text-sm mb-4">Donation status</div>
-            <div class="flex items-center gap-4">
-              <div class="ring" [style.background]="donutBackground()">
-                <div class="ring-inner">
-                  <span class="ring-num">{{ totalCount() }}</span>
-                  <span class="ring-cap">listed</span>
-                </div>
-              </div>
-              <div class="min-w-0">
-                <div class="text-muted text-xs">Delivered</div>
-                <div class="font-bold text-xl text-success-deep">{{ deliveredCount() }}</div>
-                @if (totalCount()) {
-                  <div class="text-primary-deep text-xs font-semibold mt-1">
-                    {{ deliveredPct() }}% completed
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-
-          <!-- By status — each row toggles that status in the filter. -->
-          <div class="card-fb p-5">
-            <div class="flex items-center justify-between mb-3">
-              <div class="font-bold text-sm">By status</div>
-              @if (statusSel().length) {
-                <button type="button" class="fb-link text-xs" (click)="statusSel.set([])">Clear</button>
-              }
-            </div>
-            @if (totalCount()) {
-              <div class="flex flex-col gap-1">
-                @for (s of statusStats(); track s.id) {
-                  <button
-                    type="button"
-                    class="cat-row"
-                    [class.is-active]="statusSel().includes(s.id)"
-                    [attr.aria-pressed]="statusSel().includes(s.id)"
-                    (click)="toggleStatus(s.id)"
-                  >
-                    <span class="cat-icon" [style.color]="s.color">
-                      <i [class]="s.icon" aria-hidden="true"></i>
-                    </span>
-                    <span class="cat-label">{{ s.label }}</span>
-                    <span class="cat-count">{{ s.count }}</span>
-                    <span class="cat-bar" aria-hidden="true">
-                      <span class="cat-fill" [style.width.%]="s.pct" [style.background]="s.color"></span>
-                    </span>
-                  </button>
-                }
-              </div>
-            } @else {
-              <p class="text-muted text-xs m-0">Post a donation to see the breakdown.</p>
+        <!-- By status — each row toggles that status in the filter. -->
+        <div class="card-fb p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-bold text-sm">By status</div>
+            @if (statusSel().length) {
+              <button type="button" class="fb-link text-xs" (click)="statusSel.set([])">Clear</button>
             }
           </div>
+          @if (totalCount()) {
+            <div class="flex flex-col gap-1">
+              @for (s of statusStats(); track s.id) {
+                <button
+                  type="button"
+                  class="fb-cat-row"
+                  [class.is-active]="statusSel().includes(s.id)"
+                  [attr.aria-pressed]="statusSel().includes(s.id)"
+                  (click)="toggleStatus(s.id)"
+                >
+                  <span class="fb-cat-icon" [style.color]="s.color">
+                    <i [class]="s.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ s.label }}</span>
+                  <span class="fb-cat-count">{{ s.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="s.pct" [style.background]="s.color"></span>
+                  </span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">Post a donation to see the breakdown.</p>
+          }
+        </div>
 
-          <!-- Impact -->
-          <div class="card-fb p-5">
-            <div class="font-bold text-sm mb-3">Your impact</div>
-            <div class="grid grid-cols-2 gap-3 text-center">
-              <div>
-                <div class="impact-num">{{ report()?.totalMealsDonated ?? 0 }}</div>
-                <div class="text-muted text-[11px]">Meals donated</div>
-              </div>
-              <div>
-                <div class="impact-num">{{ report()?.totalCertificates ?? 0 }}</div>
-                <div class="text-muted text-[11px]">Certificates</div>
-              </div>
+        <!-- Impact -->
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Your impact</div>
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalMealsDonated ?? 0 }}</div>
+              <div class="text-muted text-[11px]">Meals donated</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ report()?.totalCertificates ?? 0 }}</div>
+              <div class="text-muted text-[11px]">Certificates</div>
             </div>
           </div>
-        </aside>
-      </div>
-    </app-page-wrapper>
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
-    .filter-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 12px;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--fb-line);
-    }
-    .filter-row app-multi-select {
-      flex: 0 1 auto;
-      min-width: 170px;
-    }
-
     /* ---- Card footer actions: View (wide) + Edit (remaining) ---- */
     .footer-actions {
       display: flex;
@@ -250,124 +204,6 @@ const LOAD_LIMIT = 500;
       min-width: 0;
       display: block;
     }
-
-    /* ---- Status donut (data-driven conic gradient) ---- */
-    .ring {
-      width: 84px;
-      height: 84px;
-      flex-shrink: 0;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-    }
-    .ring-inner {
-      width: 62px;
-      height: 62px;
-      border-radius: 50%;
-      background: var(--fb-surface);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-    }
-    .ring-num {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--fb-ink);
-    }
-    .ring-cap {
-      margin-top: 2px;
-      font-size: 9.5px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-    }
-    .impact-num {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--fb-primary-deep);
-      line-height: 1.1;
-    }
-
-    /* ---- By-status breakdown rows (mirrors the notifications aside) ---- */
-    .cat-row {
-      display: grid;
-      grid-template-columns: 28px 1fr auto;
-      grid-template-areas:
-        'icon label count'
-        'icon bar   bar';
-      align-items: center;
-      gap: 7px 10px;
-      width: 100%;
-      padding: 8px 10px 9px;
-      border: 1px solid transparent;
-      border-radius: 12px;
-      background: transparent;
-      text-align: left;
-      cursor: pointer;
-      transition:
-        background 0.15s ease,
-        border-color 0.15s ease;
-    }
-    .cat-row:hover {
-      background: rgb(var(--fb-primary-rgb) / 0.07);
-    }
-    .cat-row.is-active {
-      background: rgb(var(--fb-primary-rgb) / 0.11);
-      border-color: var(--fb-primary);
-    }
-    .cat-icon {
-      grid-area: icon;
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 9px;
-      font-size: 12px;
-      background: color-mix(in srgb, currentColor 14%, transparent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
-    }
-    .cat-icon i {
-      color: color-mix(in srgb, currentColor 72%, #000);
-    }
-    :host-context(.dark) .cat-icon i {
-      color: color-mix(in srgb, currentColor 62%, #fff);
-    }
-    .cat-label {
-      grid-area: label;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--fb-ink);
-    }
-    .cat-count {
-      grid-area: count;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--fb-muted);
-      font-variant-numeric: tabular-nums;
-    }
-    .cat-bar {
-      grid-area: bar;
-      height: 4px;
-      border-radius: 999px;
-      overflow: hidden;
-      background: var(--fb-line);
-    }
-    .cat-fill {
-      display: block;
-      height: 100%;
-      border-radius: 999px;
-      transition: width 0.3s ease;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .cat-row,
-      .cat-fill {
-        transition: none;
-      }
-    }
   `,
 })
 export class MyListings {
@@ -381,24 +217,8 @@ export class MyListings {
   /** Lifetime donor totals for the summary card. */
   protected readonly report = signal<DonorReport | null>(null);
 
-  // ---- Filter options (icons per value) ----
-  protected readonly statusOptions: FbMultiSelectOption[] = STATUSES.map((s) => ({
-    value: s,
-    label: STATUS_LABELS[s],
-    icon: STATUS_ICONS[s],
-  }));
-  protected readonly dietOptions: FbMultiSelectOption[] = [
-    { value: 'Veg', label: DIET_LABELS.Veg, icon: 'fa-solid fa-leaf' },
-    { value: 'NonVeg', label: DIET_LABELS.NonVeg, icon: 'fa-solid fa-drumstick-bite' },
-  ];
-  protected readonly mealOptions: FbMultiSelectOption[] = [
-    { value: 'Breakfast', label: 'Breakfast', icon: 'fa-solid fa-mug-saucer' },
-    { value: 'Lunch', label: 'Lunch', icon: 'fa-solid fa-bowl-food' },
-    { value: 'Dinner', label: 'Dinner', icon: 'fa-solid fa-utensils' },
-    { value: 'Snacks', label: 'Snacks', icon: 'fa-solid fa-cookie-bite' },
-  ];
-
-  // ---- Selected filter values (empty = no filter) ----
+  // ---- Selected filter values (empty = no filter); the dropdowns live in
+  //      ListingFilters, this page owns the state it also filters the list with. ----
   protected readonly statusSel = signal<string[]>([]);
   protected readonly dietSel = signal<string[]>([]);
   protected readonly mealSel = signal<string[]>([]);
@@ -512,12 +332,6 @@ export class MyListings {
     });
   }
 
-  protected clearFilters(): void {
-    this.statusSel.set([]);
-    this.dietSel.set([]);
-    this.mealSel.set([]);
-  }
-
   protected statusOf(l: ApiListingSummary): ListingStatus {
     return toListingStatus(l.status);
   }
@@ -542,7 +356,11 @@ export class MyListings {
   protected openDetail(l: ApiListingSummary): void {
     const isPending = this.statusOf(l) === 'pending';
     this.dialog.open<ApiListingSummary, void, ListingDetailDialog>({
-      header: { title: l.title, icon: 'fa-solid fa-utensils' },
+      header: {
+        title: l.title,
+        subtitle: `${l.foodType} · Pickup by ${appDateTime(l.pickupDeadlineUtc)}`,
+        icon: 'fa-solid fa-utensils',
+      },
       content: ListingDetailDialog,
       data: l,
       size: 'lg',

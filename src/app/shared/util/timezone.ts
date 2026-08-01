@@ -1,3 +1,5 @@
+import { formatDate } from '@angular/common';
+
 /**
  * App-wide time zone. FoodBridge operates in India, so every wall-clock time —
  * pickup deadlines, join dates, timestamps — is entered and displayed in IST
@@ -95,6 +97,38 @@ export function utcIsoToAppZonedInput(iso: string): string {
 /** "Now" as an IST wall-clock picker value — a zone-correct `min` for deadlines. */
 export function appZonedNowInput(): string {
   return utcIsoToAppZonedInput(new Date().toISOString());
+}
+
+/**
+ * Format a UTC/offset ISO instant as the app's standard "MMM d, h:mm a" display in
+ * {@link APP_TIME_ZONE} — e.g. `2026-07-22T09:16:00Z` → "Jul 22, 2:46 PM". For code
+ * that needs the same string a `| date` pipe produces but outside a template.
+ */
+export function appDateTime(iso: string): string {
+  return formatDate(iso, 'MMM d, h:mm a', APP_LOCALE, APP_TIME_ZONE_OFFSET);
+}
+
+/**
+ * The current instant — a single app-wide source of "now" so every time
+ * comparison (expiry checks, deadline meters) reads the same clock and can be
+ * stubbed in tests, instead of each caller reaching for `Date.now()` directly.
+ */
+export function appNow(): Date {
+  return new Date();
+}
+
+/**
+ * True when a UTC (or offset-tagged) ISO instant has already passed — i.e. it is
+ * at or before {@link appNow}. Both sides are absolute instants, so the
+ * comparison is time-zone agnostic; "now" still comes from the shared clock so
+ * expiry is judged against one consistent, testable notion of the current time.
+ */
+export function isExpired(iso: string | null | undefined, now: Date = appNow()): boolean {
+  if (!iso) {
+    return false;
+  }
+  const at = Date.parse(iso);
+  return Number.isFinite(at) && at <= now.getTime();
 }
 
 /**

@@ -421,7 +421,7 @@ export class ImagePicker {
 
   readonly label = input('');
   readonly hint = input('');
-  readonly accept = input('image/jpeg,image/png');
+  readonly accept = input('image/jpeg,image/png,image/webp,image/avif');
   readonly maxSizeMb = input(5);
   readonly disabled = input(false);
   readonly required = input(false);

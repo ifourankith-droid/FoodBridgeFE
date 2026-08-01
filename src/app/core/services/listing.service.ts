@@ -7,6 +7,7 @@ import {
   ApiListingStatus,
   ApiListingSummary,
   ApiNearbyListing,
+  ApiTimelineEvent,
   DietType,
   ListingWriteBody,
   MealType,
@@ -25,6 +26,8 @@ export interface ImageUploadResult {
 export interface FoodFilters {
   dietType?: DietType;
   mealType?: MealType;
+  /** Listing status to narrow to server-side, e.g. `'Posted'` for the nearby feed. */
+  status?: string;
 }
 
 /** @deprecated Use {@link FoodFilters} — kept as an alias for existing callers. */
@@ -70,6 +73,15 @@ export class ListingService {
     return this.api.get<ApiListing>(API_ENDPOINTS.listings.byId(id));
   }
 
+  /**
+   * The listing's lifecycle timeline (`GET /listings/{id}/timeline`) — each status
+   * change with the actor's name, time, and any note / proof photo. Shared endpoint,
+   * usable from both the donor and volunteer sections.
+   */
+  timeline(id: string): Observable<ApiTimelineEvent[]> {
+    return this.api.get<ApiTimelineEvent[]>(API_ENDPOINTS.listings.timeline(id));
+  }
+
   update(id: string, body: ListingWriteBody): Observable<ApiListing> {
     return this.api.put<ApiListing>(API_ENDPOINTS.listings.byId(id), body);
   }
@@ -106,8 +118,18 @@ export class ListingService {
       pageSize,
       dietType: filters?.dietType,
       mealType: filters?.mealType,
+      status: filters?.status,
     };
     return this.api.get<ApiNearbyListing[]>(API_ENDPOINTS.listings.nearby, params);
+  }
+
+  /**
+   * The signed-in volunteer's claimed listings across every stage (Claimed → Confirmed),
+   * most recently updated first — the data behind My Deliveries. Full detail per row
+   * (donor/recipient contacts, ETA, status). One high page covers a volunteer's feed.
+   */
+  myDeliveries(page = 1, pageSize = 100): Observable<ApiListing[]> {
+    return this.api.get<ApiListing[]>(API_ENDPOINTS.listings.deliveries, { page, pageSize });
   }
 
   /**

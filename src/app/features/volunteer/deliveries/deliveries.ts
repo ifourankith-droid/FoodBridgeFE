@@ -3,7 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, Injector, signal 
 import { Router } from '@angular/router';
 import { catchError, EMPTY, map, Observable, of, tap } from 'rxjs';
 import { APP_ROUTES } from '@core/config/app-routes';
-import { ApiListing } from '@core/models/listing-api.model';
+import { ApiListing, toListingStatus } from '@core/models/listing-api.model';
+import { ListingStatus } from '@core/models/listing.model';
 import { AuthService } from '@core/services/auth.service';
 import { DialogService } from '@core/services/dialog.service';
 import { GeolocationService } from '@core/services/geolocation.service';
@@ -13,13 +14,16 @@ import { VolunteerDeliveriesStore } from '@core/services/volunteer-deliveries.st
 import { FbButton } from '@shared/ui/button/button';
 import { openRaiseDisputeDialog } from '@shared/ui/dispute-dialog/dispute-dialog';
 import { ListingCard, ListingCardData } from '@shared/ui/listing-card/listing-card';
-import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { ListingFilters, statusOptionsFrom } from '@shared/ui/listing-filters/listing-filters';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { openPhotoDialog } from '@shared/ui/image-picker/photo-dialog';
 import { openDeliveryDialog } from './delivery-dialog';
+import { DeliveryDetailDialog } from './delivery-detail-dialog';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { openRouteDialog, RouteContact, RouteStop } from '@shared/ui/route-dialog/route-dialog';
+import { appDateTime } from '@shared/util/timezone';
 import { environment } from '@env/environment';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 
 /** Which leg of the journey a delivery is on. `all` is the unfiltered view. */
 type Stage = 'all' | 'pickup' | 'transit' | 'done';
@@ -40,6 +44,14 @@ const STAGES: readonly StageFilter[] = [
 
 /** Sort order of the stages — the most urgent work first. */
 const STAGE_RANK: Record<LiveStage, number> = { pickup: 0, transit: 1, done: 2 };
+
+/** The only statuses a claimed delivery moves through — the Status filter's options. */
+const DELIVERY_STATUSES: readonly ListingStatus[] = [
+  'claimed',
+  'pickedup',
+  'delivered',
+  'confirmed',
+];
 
 /** The place the volunteer should head to next, when its coordinates are known. */
 interface NextStop {
@@ -77,63 +89,70 @@ const DEFAULT_ORIGIN: FbLatLng = {
 
 @Component({
   selector: 'app-deliveries',
-  imports: [DatePipe, FbButton, ListingCard, ListingGrid, PageWrapper],
+  imports: [DatePipe, FbButton, ListingCard, ListingLayout, ListingFilters, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
-      title="My Deliveries"
+    <app-listing-layout
+      [title]="'My Deliveries'"
       description="Everything you've claimed — confirm each step to keep the chain moving."
       [hasActions]="true"
+      [hasAside]="true"
+      [loading]="store.loading()"
+      [empty]="!rows().length"
+      gridClass="md:grid-cols-2"
+      emptyIcon="fa-solid fa-truck-fast"
+      [emptyText]="emptyText()"
     >
-      <div pageActions>
+      <ng-container pageActions>
+        <app-button
+          variant="outline"
+          icon="fa-solid fa-rotate"
+          [loading]="store.loading()"
+          (clicked)="store.load()"
+        >
+          Refresh
+        </app-button>
         <app-button icon="fa-solid fa-map-location-dot" (clicked)="goToNearby()">
           Find listings
         </app-button>
-      </div>
+      </ng-container>
 
-      <div class="card-fb p-4 mb-4">
-        <div class="flex items-center gap-3">
-          <div
-            class="stat-icon !mb-0"
-            style="background:linear-gradient(135deg,var(--fb-accent),var(--fb-accent-deep))"
-          >
-            <i class="fa-solid fa-truck-fast"></i>
-          </div>
-          <div class="min-w-0">
-            <div class="font-bold">
-              <span class="text-primary-deep text-2xl">{{ counts().pickup + counts().transit }}</span>
-              active {{ counts().pickup + counts().transit === 1 ? 'delivery' : 'deliveries' }}
-              @if (store.mealsInTransit()) {
-                <span class="text-muted text-sm font-normal">
-                  · {{ store.mealsInTransit() }} meals in your hands
-                </span>
-              }
-            </div>
-            <div class="text-muted text-xs mt-0.5">
-              {{ counts().pickup }} to pick up · {{ counts().transit }} in transit ·
-              {{ counts().done }} delivered
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-bar">
-          <span class="filter-label">Stage</span>
-          @for (s of stages; track s.key) {
-            <button type="button" [class]="chipClass(stage() === s.key)" (click)="stage.set(s.key)">
-              <i [class]="s.icon" class="mr-1.5 text-[11px]"></i>{{ s.label }}
-              <span class="chip-count">{{ counts()[s.key] }}</span>
-            </button>
-          }
-        </div>
-      </div>
-
-      <app-listing-grid
-        [empty]="!rows().length"
-        gridClass="md:grid-cols-2 xl:grid-cols-3"
-        emptyIcon="fa-solid fa-truck-fast"
-        [emptyText]="emptyText()"
+      <app-summary-header
+        summary
+        icon="fa-solid fa-truck-fast"
+        [loading]="store.loading()"
+        loadingText="Loading your deliveries…"
       >
-        @for (row of rows(); track row.id) {
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ counts().pickup + counts().transit }}</span>
+          active {{ counts().pickup + counts().transit === 1 ? 'delivery' : 'deliveries' }}
+          @if (store.mealsInTransit()) {
+            <span class="text-muted text-sm font-normal">
+              · {{ store.mealsInTransit() }} meals in your hands
+            </span>
+          }
+        </span>
+        <span subtitle class="text-muted">
+          {{ counts().pickup }} to pick up · {{ counts().transit }} in transit ·
+          {{ counts().done }} delivered
+        </span>
+      </app-summary-header>
+
+      <app-listing-filters
+        filters
+        [showStatus]="true"
+        [showDiet]="true"
+        [showMeal]="true"
+        [statusOptions]="statusOptions"
+        [status]="statusSel()"
+        (statusChange)="statusSel.set($event)"
+        [diet]="dietSel()"
+        (dietChange)="dietSel.set($event)"
+        [meal]="mealSel()"
+        (mealChange)="mealSel.set($event)"
+      />
+
+      @for (row of rows(); track row.id) {
           <app-listing-card
             [listing]="row.card"
             [icon]="row.stage === 'transit' ? 'fa-solid fa-truck-fast' : 'fa-solid fa-utensils'"
@@ -200,16 +219,16 @@ const DEFAULT_ORIGIN: FbLatLng = {
 
               @if (row.source.suggestedDropOffLocation; as drop) {
                 <div class="dropoff-banner">
-                  <i class="fa-solid fa-map-pin mt-0.5"></i>
+                  <span class="dropoff-icon"><i class="fa-solid fa-location-dot"></i></span>
                   <div class="min-w-0">
-                    <div class="font-bold">
+                    <div class="dropoff-title">
                       @if (row.stage === 'done') {
                         Drop-off point
                       } @else {
                         Deliver the food here
                       }
                     </div>
-                    <div>{{ drop.name }} · {{ drop.address }}</div>
+                    <div class="dropoff-addr truncate">{{ drop.name }} · {{ drop.address }}</div>
                   </div>
                 </div>
               }
@@ -241,7 +260,7 @@ const DEFAULT_ORIGIN: FbLatLng = {
                 <div class="action-row">
                   @if (row.stage === 'pickup') {
                     <app-button
-                      variant="success"
+                      class="a-70"
                       size="sm"
                       icon="fa-solid fa-hand"
                       [block]="true"
@@ -252,6 +271,7 @@ const DEFAULT_ORIGIN: FbLatLng = {
                   } @else {
                     <app-button
                       size="sm"
+                      class="a-70"
                       icon="fa-solid fa-box-open"
                       [block]="true"
                       (clicked)="start(row, 'delivery')"
@@ -260,6 +280,7 @@ const DEFAULT_ORIGIN: FbLatLng = {
                     </app-button>
                   }
                   <app-button
+                    class="a-30"
                     variant="outline"
                     size="sm"
                     icon="fa-solid fa-diamond-turn-right"
@@ -290,17 +311,92 @@ const DEFAULT_ORIGIN: FbLatLng = {
                 }
               }
 
-              <!-- Open to any party on the listing, at any stage: the problem worth
-                   reporting (missing food, nobody at the door) usually surfaces here. -->
-              <button type="button" class="report-link" (click)="reportIssue(row)">
-                <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>Report an issue
-              </button>
+              <!-- Secondary actions, side by side (wrap on a narrow card): the full
+                   timeline/photos detail, and reporting a problem (open at any stage). -->
+              <div class="foot-links">
+                <button type="button" class="foot-link" (click)="openDetail(row)">
+                  <i class="fa-solid fa-list-check"></i><span>Timeline &amp; photos</span>
+                </button>
+                <button type="button" class="foot-link danger" (click)="reportIssue(row)">
+                  <i class="fa-solid fa-triangle-exclamation"></i><span>Report an issue</span>
+                </button>
+              </div>
             </div>
           </app-listing-card>
         }
-      </app-listing-grid>
 
-    </app-page-wrapper>
+      <!-- Sticky stats aside — progress across the pickup → transit → delivered chain. -->
+      <ng-container aside>
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Delivery status</div>
+          <div class="flex items-center gap-4">
+            <div class="fb-ring" [style.background]="donutBackground()">
+              <div class="fb-ring-inner">
+                <span class="fb-ring-num">{{ activeCount() }}</span>
+                <span class="fb-ring-cap">active</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Delivered</div>
+              <div class="font-bold text-xl text-success-deep">{{ counts().done }}</div>
+              @if (store.mealsInTransit()) {
+                <div class="text-primary-deep text-xs font-semibold mt-1">
+                  {{ store.mealsInTransit() }} meals in transit
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- By stage — each row toggles that stage's statuses in the filter. -->
+        <div class="card-fb p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-bold text-sm">By stage</div>
+            @if (statusSel().length) {
+              <button type="button" class="fb-link text-xs" (click)="statusSel.set([])">Clear</button>
+            }
+          </div>
+          @if (counts().all) {
+            <div class="flex flex-col gap-1">
+              @for (s of stageStats(); track s.id) {
+                <button
+                  type="button"
+                  class="fb-cat-row"
+                  [class.is-active]="isStageActive(s.id)"
+                  [attr.aria-pressed]="isStageActive(s.id)"
+                  (click)="toggleStage(s.id)"
+                >
+                  <span class="fb-cat-icon" [style.color]="s.color">
+                    <i [class]="s.icon" aria-hidden="true"></i>
+                  </span>
+                  <span class="fb-cat-label">{{ s.label }}</span>
+                  <span class="fb-cat-count">{{ s.count }}</span>
+                  <span class="fb-cat-bar" aria-hidden="true">
+                    <span class="fb-cat-fill" [style.width.%]="s.pct" [style.background]="s.color"></span>
+                  </span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="text-muted text-xs m-0">Claim a nearby listing to start delivering.</p>
+          }
+        </div>
+
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Your impact</div>
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div class="fb-impact-num">{{ counts().done }}</div>
+              <div class="text-muted text-[11px]">Delivered</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ store.mealsInTransit() }}</div>
+              <div class="text-muted text-[11px]">Meals in transit</div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
     /* Card actions share the row evenly — neither confirming nor navigating is
@@ -309,65 +405,17 @@ const DEFAULT_ORIGIN: FbLatLng = {
       display: flex;
       gap: 8px;
     }
-    .action-row > * {
-      flex: 1 1 0;
+    .action-row .a-70 {
+      flex: 0 0 calc(70% - 4px);
+      min-width: 0;
+    }
+    .action-row .a-30 {
+      flex: 0 0 calc(30% - 4px);
       min-width: 0;
     }
 
-    .filter-bar {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--fb-line);
-    }
-    .filter-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-      margin-right: 2px;
-    }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 5px 13px;
-      font-size: 12.5px;
-      font-weight: 600;
-      border-radius: 999px;
-      border: 1.5px solid var(--fb-line);
-      background: transparent;
-      color: var(--fb-muted);
-      cursor: pointer;
-      transition:
-        background 0.15s ease,
-        color 0.15s ease,
-        border-color 0.15s ease;
-    }
-    .chip:hover {
-      border-color: var(--fb-primary);
-      color: var(--fb-primary-deep);
-    }
-    .chip.active {
-      background: var(--fb-primary);
-      border-color: var(--fb-primary);
-      color: #fff;
-    }
-    .chip-count {
-      margin-left: 7px;
-      padding: 1px 7px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 800;
-      background: var(--fb-line);
-      color: var(--fb-muted);
-    }
-    .chip.active .chip-count {
-      background: rgba(255, 255, 255, 0.28);
-      color: #fff;
+    .action-row + app-button {
+      margin-top: 8px;
     }
 
     /* Meta lines share the card's muted 12px type; the icon column keeps them aligned. */
@@ -388,18 +436,39 @@ const DEFAULT_ORIGIN: FbLatLng = {
       color: var(--fb-muted);
     }
 
+    /* Drop-off destination — a clean neutral card with a green pin chip, not a
+       heavy orange banner. */
     .dropoff-banner {
       display: flex;
-      gap: 8px;
-      margin-top: 4px;
-      padding: 9px 11px;
-      border-radius: 10px;
-      color: #b45309;
-      background: rgba(217, 119, 6, 0.12);
-      border: 1px solid rgba(217, 119, 6, 0.3);
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--fb-bg);
+      border: 1px solid var(--fb-line);
     }
-    body.dark .dropoff-banner {
-      color: #fbbf24;
+    .dropoff-icon {
+      flex: none;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--fb-success), var(--fb-success-deep));
+    }
+    .dropoff-title {
+      font-weight: 700;
+      font-size: 12.5px;
+      color: var(--fb-ink);
+    }
+    .dropoff-addr {
+      font-size: 12px;
+      color: var(--fb-muted);
+      line-height: 1.4;
     }
 
     .photo-note {
@@ -410,21 +479,44 @@ const DEFAULT_ORIGIN: FbLatLng = {
     .photo-note + app-button {
       margin-top: 8px;
     }
-    /* Deliberately quiet: always available, never competing with the stage action. */
-    .report-link {
-      display: block;
-      width: 100%;
-      margin-top: 8px;
-      padding: 4px 0 0;
-      border: 0;
-      background: none;
-      font-size: 11.5px;
-      color: var(--fb-muted);
-      cursor: pointer;
-      transition: color 0.15s ease;
+
+    /* Secondary actions as quiet chips — side by side, wrapping when the card is
+       too narrow to hold both. */
+    .foot-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
     }
-    .report-link:hover {
+    .foot-link {
+      flex: 1 1 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border: 1px solid var(--fb-line);
+      border-radius: 10px;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fb-muted);
+      white-space: nowrap;
+      cursor: pointer;
+      transition:
+        border-color 0.15s ease,
+        color 0.15s ease,
+        background 0.15s ease;
+    }
+    .foot-link:hover {
+      border-color: var(--fb-primary);
+      color: var(--fb-primary-deep);
+      background: var(--fb-primary-soft);
+    }
+    .foot-link.danger:hover {
+      border-color: #dc2626;
       color: #dc2626;
+      background: rgba(220, 38, 38, 0.06);
     }
 
     .done-note {
@@ -451,8 +543,14 @@ export class Deliveries {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
 
-  protected readonly stages = STAGES;
-  protected readonly stage = signal<Stage>('all');
+  /** Status/diet/meal filters (multi-select, empty = no filter), applied client-side
+      over the tracked claims. Options for the Status dropdown are the delivery span. */
+  protected readonly statusOptions = statusOptionsFrom(DELIVERY_STATUSES);
+  // Default to the still-active stages (Claimed + Picked up) so a volunteer lands on
+  // the work in progress; they can clear it to see delivered/confirmed too.
+  protected readonly statusSel = signal<string[]>(['claimed', 'pickedup']);
+  protected readonly dietSel = signal<string[]>([]);
+  protected readonly mealSel = signal<string[]>([]);
 
   protected readonly releasingId = signal<string | null>(null);
 
@@ -473,13 +571,94 @@ export class Deliveries {
     done: this.store.completed().length,
   }));
 
-  /** Tracked claims as card view-models, filtered to the selected stage and sorted by urgency. */
+  /** Accent per live stage — shared by the aside donut segments and breakdown rows. */
+  private readonly STAGE_COLOR: Record<LiveStage, string> = {
+    pickup: '#d97706',
+    transit: '#4f46e5',
+    done: '#059669',
+  };
+
+  /** Pickup + transit = work still in the volunteer's hands (the donut centre). */
+  protected readonly activeCount = computed(() => this.counts().pickup + this.counts().transit);
+
+  /** Per-stage counts with colour/icon + share-of-total, non-empty stages only. */
+  protected readonly stageStats = computed(() => {
+    const c = this.counts();
+    const total = c.all || 1;
+    return STAGES.filter((s) => s.key !== 'all')
+      .map((s) => ({
+        id: s.key as LiveStage,
+        label: s.label,
+        icon: s.icon,
+        color: this.STAGE_COLOR[s.key as LiveStage],
+        count: c[s.key],
+        pct: Math.round((c[s.key] / total) * 100),
+      }))
+      .filter((row) => row.count > 0);
+  });
+
+  /** Multi-segment conic gradient for the stage donut. */
+  protected readonly donutBackground = computed(() => {
+    const total = this.counts().all;
+    if (!total) {
+      return 'conic-gradient(var(--fb-line) 0 100%)';
+    }
+    let acc = 0;
+    const segments = this.stageStats().map((s) => {
+      const start = (acc / total) * 100;
+      acc += s.count;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
+
+  /** The statuses that make up each stage — the breakdown rows drive the Status filter. */
+  private readonly STAGE_STATUSES: Record<LiveStage, ListingStatus[]> = {
+    pickup: ['claimed'],
+    transit: ['pickedup'],
+    done: ['delivered', 'confirmed'],
+  };
+
+  /** A stage row is "on" when all of its statuses are currently selected. */
+  protected isStageActive(stage: LiveStage): boolean {
+    const sel = new Set(this.statusSel());
+    return this.STAGE_STATUSES[stage].every((s) => sel.has(s));
+  }
+
+  /** Toggle a stage's statuses in the Status filter from a breakdown row. */
+  protected toggleStage(stage: LiveStage): void {
+    const wanted = this.STAGE_STATUSES[stage];
+    const sel = new Set(this.statusSel());
+    if (wanted.every((s) => sel.has(s))) {
+      wanted.forEach((s) => sel.delete(s));
+    } else {
+      wanted.forEach((s) => sel.add(s));
+    }
+    this.statusSel.set([...sel]);
+  }
+
+  /** Tracked claims as card view-models, narrowed by the filters and sorted by urgency. */
   protected readonly rows = computed<DeliveryRow[]>(() => {
-    const stage = this.stage();
+    const statuses = new Set(this.statusSel());
+    const diets = new Set(this.dietSel());
+    const meals = new Set(this.mealSel());
     return this.store
       .all()
       .map((l) => this.toRow(l))
-      .filter((r) => stage === 'all' || r.stage === stage)
+      .filter((r) => {
+        const l = r.source;
+        if (statuses.size && !statuses.has(toListingStatus(l.status))) {
+          return false;
+        }
+        if (diets.size && (!l.dietType || !diets.has(l.dietType))) {
+          return false;
+        }
+        if (meals.size && (!l.mealType || !meals.has(l.mealType))) {
+          return false;
+        }
+        return true;
+      })
       .sort(
         (a, b) =>
           STAGE_RANK[a.stage] - STAGE_RANK[b.stage] ||
@@ -489,7 +668,7 @@ export class Deliveries {
 
   protected readonly emptyText = computed(() =>
     this.counts().all
-      ? 'Nothing at this stage — switch the filter to see your other deliveries'
+      ? 'Nothing matches these filters — clear them to see your other deliveries'
       : "You haven't claimed anything yet — claim a nearby listing to get started",
   );
 
@@ -511,14 +690,14 @@ export class Deliveries {
    * else the map default. Emits once and never errors — a refused permission just falls
    * through to the next source.
    */
-  private resolveOrigin(): Observable<{ at: FbLatLng; source: OriginSource }> {
+  private resolveOrigin(): Observable<{ at: FbLatLng; source: OriginSource; }> {
     return this.geo.current().pipe(
       map((at) => ({ at, source: 'gps' as OriginSource })),
       catchError(() => this.profileOrigin()),
     );
   }
 
-  private profileOrigin(): Observable<{ at: FbLatLng; source: OriginSource }> {
+  private profileOrigin(): Observable<{ at: FbLatLng; source: OriginSource; }> {
     const fallback = { at: DEFAULT_ORIGIN, source: 'default' as OriginSource };
     const id = this.auth.currentUser()?.id;
     if (!id) {
@@ -535,11 +714,6 @@ export class Deliveries {
   }
 
   // ---- View helpers ----
-
-  protected chipClass(active: boolean): string {
-    return active ? 'chip active' : 'chip';
-  }
-
   protected iconBg(row: DeliveryRow): string {
     switch (row.stage) {
       case 'pickup':
@@ -598,6 +772,8 @@ export class Deliveries {
           // Without a matched recipient this confirmation is the last step — nobody is left
           // to confirm receipt afterward, so the photo is the delivery record itself.
           completesDonation: !row.source.recipientName,
+          // When a recipient is matched, offer them as the pre-selected drop-off.
+          recipientName: row.source.recipientName ?? null,
         },
         (photo, dropOff) => this.submitStep(this.store.confirmDelivery(id, photo, dropOff)),
       );
@@ -692,6 +868,22 @@ export class Deliveries {
     openRaiseDisputeDialog(this.dialog, this.injector, {
       listingId: row.id,
       listingTitle: row.source.title,
+    });
+  }
+
+  /** Show the full detail: food photo, attributes, and the step-by-step timeline. */
+  protected openDetail(row: DeliveryRow): void {
+    const l = row.source;
+    this.dialog.open<ApiListing, void, DeliveryDetailDialog>({
+      header: {
+        title: l.title,
+        subtitle: `${l.foodType} · Pickup by ${appDateTime(l.pickupDeadlineUtc)}`,
+        icon: 'fa-solid fa-utensils',
+      },
+      content: DeliveryDetailDialog,
+      data: l,
+      size: 'lg',
+      actions: [{ id: 'close', label: 'Close', variant: 'ghost', close: true }],
     });
   }
 
@@ -811,6 +1003,7 @@ export class Deliveries {
         pickupDeadlineUtc: l.pickupDeadlineUtc,
         status: l.status,
         createdAtUtc: l.createdAtUtc,
+        imageUrl: l.images?.[0]?.imageUrl ?? null,
       },
     };
   }
@@ -839,12 +1032,12 @@ export class Deliveries {
     const drop = stage === 'transit' ? l.suggestedDropOffLocation : null;
     return drop
       ? {
-          role: `Drop-off · ${drop.name}`,
-          short: 'drop-off',
-          address: drop.address,
-          at: { lat: drop.latitude, lng: drop.longitude },
-          color: COLOR_DROP,
-        }
+        role: `Drop-off · ${drop.name}`,
+        short: 'drop-off',
+        address: drop.address,
+        at: { lat: drop.latitude, lng: drop.longitude },
+        color: COLOR_DROP,
+      }
       : null;
   }
 }

@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { APP_ROUTES } from '@core/config/app-routes';
 import { AuthService } from '@core/services/auth.service';
 import { PickupAddressService } from '@core/services/pickup-address.service';
+import { ThemeService } from '@core/services/theme.service';
 import { RoleBadge } from '@shared/ui/role-badge/role-badge';
 import { Avatar } from '@shared/ui/avatar/avatar';
 import { AvailabilityService } from '@core/services/availability.service';
@@ -49,7 +50,7 @@ import { NotificationBell } from '../notification-bell/notification-bell';
       gap: 8px;
       height: 42px;
       padding: 0 14px;
-      border-radius: 999px;
+      border-radius: 12px;
       border: 1px solid var(--fb-line);
       background: var(--fb-surface);
       color: var(--fb-ink);
@@ -165,6 +166,7 @@ export class Topbar {
   protected readonly layout = inject(LayoutService);
   protected readonly availability = inject(AvailabilityService);
   protected readonly pickup = inject(PickupAddressService);
+  protected readonly theme = inject(ThemeService);
 
   protected readonly notifOpen = signal(false);
   protected readonly menuOpen = signal(false);

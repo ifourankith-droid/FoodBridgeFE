@@ -258,6 +258,95 @@ body.fb-dialog-open {
     @apply text-[13px] text-muted;
   }
 
+  /* ---- Listing stat aside ----
+     Shared chrome for the sticky right-hand stats panel used by the listing
+     pages (My Donations, Nearby, My Deliveries) via ListingLayout's `aside`
+     slot. Lives here — not in a component — because projected aside content is
+     styled by its host page's scope, so a component stylesheet can't reach it.
+     A data-driven conic gradient donut plus per-category breakdown rows. */
+  /* Sized to match the Notifications read-progress ring: 74/58 → an 8px band. */
+  .fb-ring {
+    @apply w-[74px] h-[74px] shrink-0 rounded-full grid place-items-center;
+  }
+  .fb-ring-inner {
+    @apply w-[58px] h-[58px] rounded-full flex flex-col items-center justify-center leading-none;
+    background: var(--fb-surface);
+  }
+  .fb-ring-num {
+    @apply text-[20px] font-extrabold;
+    color: var(--fb-ink);
+  }
+  .fb-ring-cap {
+    @apply mt-0.5 text-[9.5px] font-semibold tracking-[0.06em] uppercase;
+    color: var(--fb-muted);
+  }
+  .fb-impact-num {
+    @apply text-[22px] font-extrabold leading-[1.1] text-primary-deep;
+  }
+
+  /* One breakdown row: icon · label · count over a share bar. Optionally a
+     button (toggles a filter) — the :hover/.is-active states assume that. */
+  .fb-cat-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    grid-template-areas:
+      'icon label count'
+      'icon bar   bar';
+    @apply items-center gap-x-2.5 gap-y-[7px] w-full text-left rounded-xl;
+    padding: 8px 10px 9px;
+    border: 1px solid transparent;
+    background: transparent;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  button.fb-cat-row {
+    cursor: pointer;
+  }
+  button.fb-cat-row:hover {
+    background: rgb(var(--fb-primary-rgb) / 0.07);
+  }
+  .fb-cat-row.is-active {
+    background: rgb(var(--fb-primary-rgb) / 0.11);
+    border-color: var(--fb-primary);
+  }
+  .fb-cat-icon {
+    grid-area: icon;
+    @apply w-7 h-7 flex items-center justify-center rounded-[9px] text-xs;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .fb-cat-icon i {
+    color: color-mix(in srgb, currentColor 72%, #000);
+  }
+  body.dark .fb-cat-icon i {
+    color: color-mix(in srgb, currentColor 62%, #fff);
+  }
+  .fb-cat-label {
+    grid-area: label;
+    @apply text-[13px] font-semibold;
+    color: var(--fb-ink);
+  }
+  .fb-cat-count {
+    grid-area: count;
+    @apply text-xs font-bold text-muted tabular-nums;
+  }
+  .fb-cat-bar {
+    grid-area: bar;
+    @apply h-1 rounded-full overflow-hidden;
+    background: var(--fb-line);
+  }
+  .fb-cat-fill {
+    @apply block h-full rounded-full;
+    transition: width 0.3s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fb-cat-row,
+    .fb-cat-fill {
+      transition: none;
+    }
+  }
+
   /* Status badges (listing lifecycle) */
   .badge-fb {
     @apply text-[11px] font-bold px-3 py-1.5 rounded-full capitalize;

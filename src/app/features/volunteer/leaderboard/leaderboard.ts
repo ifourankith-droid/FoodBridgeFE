@@ -8,8 +8,8 @@ import { ToastService } from '@core/services/toast.service';
 import { VolunteerService } from '@core/services/volunteer.service';
 import { Avatar } from '@shared/ui/avatar/avatar';
 import { FbButton } from '@shared/ui/button/button';
-import { EmptyState } from '@shared/ui/empty-state/empty-state';
-import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
+import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
+import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 
 /** A ranked row decorated with everything the list needs to render it. */
 interface RankRow {
@@ -21,20 +21,25 @@ interface RankRow {
   pct: number;
 }
 
-/** Podium order: silver, gold, bronze — so first place stands in the middle. */
-const PODIUM_ORDER = [1, 0, 2];
-
 const MEDALS = ['gold', 'silver', 'bronze'] as const;
 
 @Component({
   selector: 'app-leaderboard',
-  imports: [DecimalPipe, Avatar, EmptyState, FbButton, PageWrapper],
+  imports: [DecimalPipe, Avatar, FbButton, ListingLayout, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper
+    <app-listing-layout
       title="Leaderboard"
       description="Top volunteers by rescue points — one point per meal delivered and confirmed."
       [hasActions]="true"
+      [hasAside]="true"
+      [hasFilters]="false"
+      [loading]="loading()"
+      [empty]="!rows().length"
+      gridClass="md:grid-cols-2"
+      emptyIcon="fa-solid fa-ranking-star"
+      emptyTitle="No ranked volunteers yet"
+      emptyText="Points are awarded when a recipient confirms a delivery. The first confirmed drop-off starts the board."
     >
       <div pageActions>
         <app-button
@@ -47,312 +52,189 @@ const MEDALS = ['gold', 'silver', 'bronze'] as const;
         </app-button>
       </div>
 
-      @if (loading()) {
-        <div class="grid gap-4 lg:grid-cols-3 mb-4">
-          @for (s of skeletons; track $index) {
-            <div class="card-fb p-5">
-              <div class="skeleton !rounded-full w-14 h-14 mb-3"></div>
-              <div class="skeleton h-4 w-28 mb-2"></div>
-              <div class="skeleton h-3 w-20"></div>
+      <!-- Summary: how many are ranked + the board totals — same shape as the listing pages. -->
+      <app-summary-header
+        summary
+        icon="fa-solid fa-ranking-star"
+        [loading]="loading()"
+        loadingText="Loading the leaderboard…"
+      >
+        <span heading>
+          <span class="text-primary-deep text-2xl">{{ rows().length }}</span>
+          ranked {{ rows().length === 1 ? 'volunteer' : 'volunteers' }}
+        </span>
+        <span subtitle class="text-muted">
+          {{ boardPoints() | number }} points · {{ boardDeliveries() | number }} deliveries rescued
+        </span>
+      </app-summary-header>
+
+      <!-- Left column: one user card per ranked volunteer. -->
+      @for (row of rows(); track row.entry.volunteerId) {
+        <div class="user-card card-fb" [class.is-me]="row.isMe">
+          <div class="uc-head">
+            <div class="rank-pill" [class]="row.medal ? 'medal-' + row.medal : ''">
+              #{{ row.entry.rank }}
             </div>
-          }
-        </div>
-        <div class="card-fb p-3">
-          @for (s of skeletons; track $index) {
-            <div class="flex items-center gap-3 p-2.5">
-              <div class="skeleton w-8 h-8 !rounded-lg"></div>
-              <div class="skeleton !rounded-full w-9 h-9"></div>
-              <div class="flex-1">
-                <div class="skeleton h-3.5 w-32 mb-1.5"></div>
-                <div class="skeleton h-2.5 w-20"></div>
+            <app-avatar [name]="row.entry.name" [size]="44" />
+            <div class="min-w-0 flex-1">
+              <div class="uc-name">
+                {{ row.entry.name }}@if (row.isMe) {<span class="text-muted"> (you)</span>}
               </div>
-              <div class="skeleton h-4 w-16"></div>
+              <div class="text-muted text-xs">
+                {{ row.entry.totalDeliveries }}
+                {{ row.entry.totalDeliveries === 1 ? 'delivery' : 'deliveries' }}
+              </div>
             </div>
-          }
-        </div>
-      } @else if (!rows().length) {
-        <div class="card-fb">
-          <app-empty-state
-            icon="fa-solid fa-ranking-star"
-            title="No ranked volunteers yet"
-            text="Points are awarded when a recipient confirms a delivery. The first confirmed drop-off starts the board."
-          />
-        </div>
-      } @else {
-        <!-- Your standing. Shown even when unranked, so the page always answers
-             "where do I stand?" rather than leaving the volunteer to hunt the list. -->
-        <div class="card-fb me-card mb-4">
-          <div class="me-rank">
-            @if (me(); as m) {
-              <span class="me-rank-num">#{{ m.rank }}</span>
-              <span class="me-rank-cap">your rank</span>
-            } @else {
-              <span class="me-rank-num">—</span>
-              <span class="me-rank-cap">unranked</span>
+            @if (row.medal) {
+              <i class="fa-solid fa-medal uc-medal" [class]="'medal-' + row.medal" aria-hidden="true"></i>
             }
           </div>
 
-          <div class="min-w-0 flex-1">
-            <div class="font-bold">{{ myName() }}</div>
-            @if (me(); as m) {
-              <div class="text-muted text-sm mt-0.5">
-                {{ m.totalPoints | number }} points · {{ m.totalDeliveries }}
-                {{ m.totalDeliveries === 1 ? 'delivery' : 'deliveries' }}
-              </div>
-              @if (gapToNext(); as gap) {
-                <div class="text-primary-deep text-xs font-semibold mt-1.5">
-                  <i class="fa-solid fa-arrow-trend-up mr-1"></i>{{ gap.points | number }} more
-                  {{ gap.points === 1 ? 'point' : 'points' }} to pass {{ gap.name }} at #{{
-                    gap.rank
-                  }}
-                </div>
+          <div class="uc-foot">
+            <!-- Share of the leader's total: a comparison you can read at a glance. -->
+            <span class="rank-rail" aria-hidden="true">
+              <span class="rank-fill" [style.width.%]="row.pct"></span>
+            </span>
+            <span class="uc-points">
+              {{ row.entry.totalPoints | number }}<span class="uc-points-cap">pts</span>
+            </span>
+          </div>
+        </div>
+      }
+
+      <!-- Sticky aside: your standing, the top three, and board totals. -->
+      <ng-container aside>
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-4">Your standing</div>
+          <div class="flex items-center gap-4">
+            <div class="me-rank">
+              @if (me(); as m) {
+                <span class="me-rank-num">#{{ m.rank }}</span>
+                <span class="me-rank-cap">your rank</span>
               } @else {
-                <div class="text-success-deep text-xs font-semibold mt-1.5">
-                  <i class="fa-solid fa-crown mr-1"></i>You're leading the board — nice work.
-                </div>
+                <span class="me-rank-num">—</span>
+                <span class="me-rank-cap">unranked</span>
               }
+            </div>
+            <div class="min-w-0">
+              <div class="text-muted text-xs">Points</div>
+              <div class="font-bold text-xl text-primary-deep">{{ me()?.totalPoints ?? 0 | number }}</div>
+              <div class="text-muted text-[11px] mt-1 truncate">{{ myName() }}</div>
+            </div>
+          </div>
+
+          @if (me(); as m) {
+            @if (gapToNext(); as gap) {
+              <div class="text-primary-deep text-xs font-semibold mt-3">
+                <i class="fa-solid fa-arrow-trend-up mr-1"></i>{{ gap.points | number }} more
+                {{ gap.points === 1 ? 'point' : 'points' }} to pass {{ gap.name }} at #{{ gap.rank }}
+              </div>
             } @else {
-              <div class="text-muted text-sm mt-0.5">
-                Deliver a listing and you'll appear here once the recipient confirms it.
+              <div class="text-success-deep text-xs font-semibold mt-3">
+                <i class="fa-solid fa-crown mr-1"></i>You're leading the board — nice work.
               </div>
             }
-          </div>
-
-          <div class="me-total">
-            <div class="me-total-num">{{ me()?.totalPoints ?? 0 | number }}</div>
-            <div class="me-total-cap">points</div>
-          </div>
+          } @else {
+            <div class="text-muted text-xs mt-3">
+              Deliver a listing and you'll appear here once the recipient confirms it.
+            </div>
+          }
         </div>
 
-        <!-- Podium: top three, first place raised in the middle -->
-        @if (podium().length === 3) {
-          <div class="podium mb-4">
-            @for (i of podiumOrder; track i) {
-              @if (podium()[i]; as row) {
-                <div class="card-fb pod" [class]="'pod-' + row.medal" [class.is-me]="row.isMe">
-                  <div class="pod-medal"><i class="fa-solid fa-medal"></i>#{{ row.entry.rank }}</div>
-                  <app-avatar [name]="row.entry.name" [size]="row.medal === 'gold' ? 62 : 50" />
-                  <div class="pod-name">
-                    {{ row.entry.name }}@if (row.isMe) {<span class="text-muted"> (you)</span>}
+        @if (podium().length) {
+          <div class="card-fb p-5">
+            <div class="font-bold text-sm mb-3">Top volunteers</div>
+            <div class="flex flex-col gap-1">
+              @for (row of podium(); track row.entry.volunteerId) {
+                <div class="top-row" [class.is-me]="row.isMe">
+                  <div class="rank-pill" [class]="row.medal ? 'medal-' + row.medal : ''">
+                    #{{ row.entry.rank }}
                   </div>
-                  <div class="pod-points">{{ row.entry.totalPoints | number }} pts</div>
-                  <div class="pod-sub">
-                    {{ row.entry.totalDeliveries }}
-                    {{ row.entry.totalDeliveries === 1 ? 'delivery' : 'deliveries' }}
+                  <app-avatar [name]="row.entry.name" [size]="30" />
+                  <div class="min-w-0 flex-1">
+                    <div class="top-name">
+                      {{ row.entry.name }}@if (row.isMe) {<span class="text-muted"> (you)</span>}
+                    </div>
                   </div>
+                  <div class="top-pts">{{ row.entry.totalPoints | number }}</div>
                 </div>
               }
-            }
+            </div>
           </div>
         }
 
-        <!-- Full ranking -->
-        <div class="card-fb overflow-hidden">
-          <div class="list-head">
-            <span>Full ranking</span>
-            <span class="list-count">{{ rows().length }}</span>
-          </div>
-
-          @for (row of rows(); track row.entry.volunteerId) {
-            <div class="rank-row" [class.is-me]="row.isMe">
-              <div class="rank-pill" [class]="row.medal ? 'medal-' + row.medal : ''">
-                #{{ row.entry.rank }}
-              </div>
-              <app-avatar [name]="row.entry.name" [size]="38" />
-
-              <div class="min-w-0 flex-1">
-                <div class="rank-name">
-                  {{ row.entry.name }}@if (row.isMe) {<span class="text-muted"> (you)</span>}
-                </div>
-                <div class="text-muted text-xs">
-                  {{ row.entry.totalDeliveries }}
-                  {{ row.entry.totalDeliveries === 1 ? 'delivery' : 'deliveries' }}
-                </div>
-                <!-- Share of the leader's total: turns a column of numbers into a
-                     comparison you can read at a glance. -->
-                <div class="rank-rail" aria-hidden="true">
-                  <span class="rank-fill" [style.width.%]="row.pct"></span>
-                </div>
-              </div>
-
-              <div class="rank-points">
-                {{ row.entry.totalPoints | number }}<span class="rank-points-cap">pts</span>
-              </div>
+        <div class="card-fb p-5">
+          <div class="font-bold text-sm mb-3">Board totals</div>
+          <div class="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div class="fb-impact-num">{{ rows().length }}</div>
+              <div class="text-muted text-[11px]">Volunteers</div>
             </div>
-          }
+            <div>
+              <div class="fb-impact-num">{{ boardPoints() | number }}</div>
+              <div class="text-muted text-[11px]">Points</div>
+            </div>
+            <div>
+              <div class="fb-impact-num">{{ boardDeliveries() | number }}</div>
+              <div class="text-muted text-[11px]">Deliveries</div>
+            </div>
+          </div>
         </div>
-      }
-    </app-page-wrapper>
+      </ng-container>
+    </app-listing-layout>
   `,
   styles: `
-    /* ---- Your standing ---- */
-    .me-card {
+    /* ---- User card (one ranked volunteer) ---- */
+    .user-card {
       display: flex;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-      padding: 18px 20px;
-      /* Brand wash so the volunteer's own row is unmistakably theirs. */
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+    }
+    .user-card.is-me {
+      box-shadow:
+        inset 3px 0 0 var(--fb-primary),
+        var(--fb-shadow);
       background:
-        radial-gradient(ellipse 60% 100% at 0% 50%, var(--fb-primary-soft), transparent 70%),
+        radial-gradient(ellipse 70% 100% at 0% 0%, var(--fb-primary-soft), transparent 70%),
         var(--fb-surface);
     }
-    .me-rank {
+    .uc-head {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      width: 74px;
-      height: 74px;
-      flex-shrink: 0;
-      border-radius: 20px;
-      color: #fff;
-      background: linear-gradient(135deg, var(--fb-primary), var(--fb-primary-deep));
-      box-shadow: 0 10px 24px var(--fb-glow-primary-deep);
-    }
-    .me-rank-num {
-      font-size: 22px;
-      font-weight: 800;
-      line-height: 1;
-    }
-    .me-rank-cap {
-      margin-top: 3px;
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      opacity: 0.85;
-    }
-    .me-total {
-      text-align: right;
-      flex-shrink: 0;
-    }
-    .me-total-num {
-      font-size: 28px;
-      font-weight: 800;
-      line-height: 1;
-      color: var(--fb-primary-deep);
-    }
-    .me-total-cap {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-    }
-
-    /* ---- Podium ---- */
-    .podium {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      align-items: end;
       gap: 12px;
     }
-    @media (max-width: 560px) {
-      .podium {
-        grid-template-columns: 1fr;
-        align-items: stretch;
-      }
-    }
-    .pod {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 7px;
-      padding: 18px 14px;
-      text-align: center;
-      border-top: 3px solid var(--fb-line);
-    }
-    /* First place is physically taller — the ranking reads before the numbers do. */
-    .pod-gold {
-      padding-top: 26px;
-      padding-bottom: 26px;
-      border-top-color: #e0a52a;
-    }
-    .pod-silver {
-      border-top-color: #9aa3ad;
-    }
-    .pod-bronze {
-      border-top-color: #b87333;
-    }
-    .pod.is-me {
-      box-shadow: 0 0 0 2px var(--fb-primary) inset;
-    }
-    .pod-medal {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      color: var(--fb-muted);
-    }
-    .pod-gold .pod-medal {
-      color: #b8860b;
-    }
-    .pod-silver .pod-medal {
-      color: #6b7280;
-    }
-    .pod-bronze .pod-medal {
-      color: #a0522d;
-    }
-    .pod-name {
-      font-size: 13.5px;
+    .uc-name {
+      font-size: 14px;
       font-weight: 700;
       line-height: 1.3;
     }
-    .pod-points {
-      font-size: 17px;
-      font-weight: 800;
-      color: var(--fb-primary-deep);
-      line-height: 1;
+    .uc-medal {
+      flex-shrink: 0;
+      font-size: 18px;
     }
-    .pod-sub {
-      font-size: 11.5px;
-      color: var(--fb-muted);
-    }
-
-    /* ---- Full ranking list ---- */
-    .list-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-      border-bottom: 1px solid var(--fb-line);
-    }
-    .list-count {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 20px;
-      height: 18px;
-      padding: 0 6px;
-      border-radius: 999px;
-      font-size: 10.5px;
-      letter-spacing: 0;
-      background: rgb(var(--fb-primary-rgb) / 0.12);
-      color: var(--fb-primary-deep);
-    }
-
-    .rank-row {
+    .uc-foot {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 11px 16px;
     }
-    .rank-row + .rank-row {
-      border-top: 1px solid var(--fb-line);
+    .uc-points {
+      flex-shrink: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--fb-primary-deep);
+      font-variant-numeric: tabular-nums;
     }
-    .rank-row.is-me {
-      background: rgb(var(--fb-primary-rgb) / 0.08);
-      box-shadow: inset 3px 0 0 var(--fb-primary);
+    .uc-points-cap {
+      margin-left: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--fb-muted);
     }
 
+    /* ---- Rank pill (shared by user cards + the aside top-3) ---- */
     .rank-pill {
       width: 34px;
       height: 30px;
@@ -381,15 +263,30 @@ const MEDALS = ['gold', 'silver', 'bronze'] as const;
       background: rgba(184, 115, 51, 0.18);
       color: #a0522d;
     }
-
-    .rank-name {
-      font-size: 13.5px;
-      font-weight: 600;
+    .uc-medal.medal-gold {
+      color: #e0a52a;
     }
+    .uc-medal.medal-silver {
+      color: #9aa3ad;
+    }
+    .uc-medal.medal-bronze {
+      color: #b87333;
+    }
+    body.dark .rank-pill.medal-silver {
+      color: #cbd5e1;
+    }
+    body.dark .rank-pill.medal-gold {
+      color: #fbbf24;
+    }
+    body.dark .rank-pill.medal-bronze {
+      color: #e59a5b;
+    }
+
+    /* ---- Share rail ---- */
     .rank-rail {
+      flex: 1 1 auto;
       display: block;
-      height: 4px;
-      margin-top: 6px;
+      height: 5px;
       border-radius: 999px;
       overflow: hidden;
       background: var(--fb-line);
@@ -401,30 +298,55 @@ const MEDALS = ['gold', 'silver', 'bronze'] as const;
       background: var(--fb-primary);
     }
 
-    .rank-points {
+    /* ---- Aside: your rank tile ---- */
+    .me-rank {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 74px;
+      height: 74px;
       flex-shrink: 0;
-      font-size: 15px;
+      border-radius: 20px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--fb-primary), var(--fb-primary-deep));
+      box-shadow: 0 10px 24px var(--fb-glow-primary-deep);
+    }
+    .me-rank-num {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .me-rank-cap {
+      margin-top: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    /* ---- Aside: top-3 list ---- */
+    .top-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 4px;
+      border-radius: 10px;
+    }
+    .top-row.is-me {
+      background: rgb(var(--fb-primary-rgb) / 0.09);
+    }
+    .top-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .top-pts {
+      flex-shrink: 0;
+      font-size: 13px;
       font-weight: 800;
       color: var(--fb-primary-deep);
       font-variant-numeric: tabular-nums;
-    }
-    .rank-points-cap {
-      margin-left: 4px;
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: var(--fb-muted);
-    }
-
-    body.dark .rank-pill.medal-silver {
-      color: #cbd5e1;
-    }
-    body.dark .rank-pill.medal-gold {
-      color: #fbbf24;
-    }
-    body.dark .rank-pill.medal-bronze {
-      color: #e59a5b;
     }
   `,
 })
@@ -432,9 +354,6 @@ export class Leaderboard {
   private readonly auth = inject(AuthService);
   private readonly volunteers = inject(VolunteerService);
   private readonly toast = inject(ToastService);
-
-  protected readonly podiumOrder = PODIUM_ORDER;
-  protected readonly skeletons = Array.from({ length: 3 });
 
   private readonly entries = signal<LeaderboardEntry[]>([]);
   /** GET /leaderboard/me — null while loading, or when this volunteer has no points yet. */
@@ -467,6 +386,14 @@ export class Leaderboard {
   });
 
   protected readonly podium = computed(() => this.rows().slice(0, 3));
+
+  /** Board-wide totals for the summary strip and the aside "Board totals" card. */
+  protected readonly boardPoints = computed(() =>
+    this.entries().reduce((sum, e) => sum + e.totalPoints, 0),
+  );
+  protected readonly boardDeliveries = computed(() =>
+    this.entries().reduce((sum, e) => sum + e.totalDeliveries, 0),
+  );
 
   /**
    * How far behind the next volunteer up the caller is. Null when they are already
