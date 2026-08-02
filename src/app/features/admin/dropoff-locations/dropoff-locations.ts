@@ -124,7 +124,7 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
       }
 
       @if (loading()) {
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 lg:grid-cols-2">
           @for (s of skeletons; track $index) {
             <div class="card-fb p-4">
               <div class="skeleton h-4 w-40 mb-2"></div>
@@ -135,10 +135,7 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
           }
         </div>
       } @else if (locations().length) {
-        <div class="mb-3 text-muted text-xs">
-          {{ activeCount() }} active · {{ locations().length - activeCount() }} retired
-        </div>
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 lg:grid-cols-2">
           @for (l of sorted(); track l.id) {
             <div class="card-fb p-4" [class.is-retired]="!l.isActive">
               <div class="flex items-start gap-2 mb-2">
