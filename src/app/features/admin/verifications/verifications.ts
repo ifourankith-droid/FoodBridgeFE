@@ -6,36 +6,51 @@ import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
 import { FbButton } from '@shared/ui/button/button';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
+import { openImageDialog } from '@shared/ui/image-viewer/image-viewer-dialog';
+import { FbMultiSelect, FbMultiSelectOption } from '@shared/ui/multi-select/multi-select';
 import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
 import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { mediaUrl } from '@shared/util/media-url';
 import { APP_LOCALE, APP_TIME_ZONE } from '@shared/util/timezone';
 
-/** Backend `AccountStatus` enum names, plus the "no filter" case. */
-type StatusFilter = 'all' | 'Pending' | 'Verified' | 'Suspended';
+/** Backend `AccountStatus` enum names used as filter values. */
+type StatusValue = 'Pending' | 'Verified' | 'Suspended';
 
-/** Backend `Role` enum names, plus the "no filter" case. */
-type RoleFilter = 'all' | 'Volunteer' | 'Recipient' | 'Donor';
-
-const STATUS_FILTERS: readonly { id: StatusFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'Pending', label: 'Pending' },
-  { id: 'Verified', label: 'Verified' },
-  { id: 'Suspended', label: 'Suspended' },
-];
-
-const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
-  { id: 'all', label: 'Everyone' },
-  { id: 'Volunteer', label: 'Volunteers' },
-  { id: 'Recipient', label: 'Organizations' },
-  { id: 'Donor', label: 'Donors' },
-];
+/** Backend `Role` enum names used as filter values. */
+type RoleValue = 'Volunteer' | 'Recipient' | 'Donor';
 
 /**
- * Account moderation. Both filters are sent to `GET /admin/accounts` as query
- * params rather than applied client-side, so paging stays correct as the platform
- * grows (the envelope interceptor drops `TotalCount`, so a client-side filter over
- * one page would silently under-report).
+ * Filter-dropdown configurations for the two {@link FbMultiSelect} facets.
+ * An empty selection means "all" — the component reads the `allLabel` and the
+ * page treats "no selection" as "no filter". Values match the backend enum
+ * names so they compare straight against `accountStatus` / `role`.
+ */
+const STATUS_OPTIONS: readonly FbMultiSelectOption[] = [
+  { value: 'Pending', label: 'Pending', icon: 'fa-solid fa-hourglass-half' },
+  { value: 'Verified', label: 'Verified', icon: 'fa-solid fa-circle-check' },
+  { value: 'Suspended', label: 'Suspended', icon: 'fa-solid fa-ban' },
+];
+
+const ROLE_OPTIONS: readonly FbMultiSelectOption[] = [
+  { value: 'Volunteer', label: 'Volunteers', icon: 'fa-solid fa-hand-holding-heart' },
+  { value: 'Recipient', label: 'Organizations', icon: 'fa-solid fa-building' },
+  { value: 'Donor', label: 'Donors', icon: 'fa-solid fa-user' },
+];
+
+/** One page big enough to hold the platform's accounts — the facets filter client-side. */
+const LOAD_LIMIT = 500;
+
+/** Add `value` to `list` if absent, remove it if present (multi-select toggle). */
+function toggle(list: readonly string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/**
+ * Account moderation. The full account set is loaded once (up to {@link LOAD_LIMIT})
+ * and the two Status / Role facets are applied client-side, so each can be a
+ * multi-select {@link FbMultiSelect} dropdown — the `GET /admin/accounts` endpoint
+ * only accepts a single value per facet, and the envelope interceptor drops
+ * `TotalCount`, so server-side multi-value filtering isn't available here.
  *
  * Verifying matters beyond the badge: the backend's `RecipientMatcher` only ever
  * routes food to a recipient whose `AccountStatus` is `Verified`, so a pending NGO
@@ -43,7 +58,7 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
  */
 @Component({
   selector: 'app-verifications',
-  imports: [FbButton, EmptyState, ListingLayout, SummaryHeader],
+  imports: [FbButton, EmptyState, FbMultiSelect, ListingLayout, SummaryHeader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
@@ -75,33 +90,36 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
         </span>
       </app-summary-header>
 
-      <div filters>
-        <div class="flex flex-wrap items-center gap-2 w-full">
-          <span class="small-label !mb-0 mr-1">Status</span>
-          @for (f of STATUS_FILTERS; track f.id) {
-            <button
-              [class]="(status() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
-              (click)="setStatus(f.id)"
-            >
-              {{ f.label }}
-            </button>
-          }
-        </div>
-        <div class="flex flex-wrap items-center gap-2 w-full">
-          <span class="small-label !mb-0 mr-1">Role</span>
-          @for (f of ROLE_FILTERS; track f.id) {
-            <button
-              [class]="(role() === f.id ? 'btn-fb' : 'btn-fb-outline') + ' !py-1.5 !px-3 !text-sm'"
-              (click)="setRole(f.id)"
-            >
-              {{ f.label }}
-            </button>
-          }
-        </div>
+      <div filters class="flex flex-wrap items-center gap-2 w-full">
+        <app-multi-select
+          icon="fa-solid fa-layer-group"
+          allLabel="All statuses"
+          [options]="STATUS_OPTIONS"
+          [selected]="statusSel()"
+          (selectionChange)="statusSel.set($event)"
+        />
+        <app-multi-select
+          icon="fa-solid fa-user-tag"
+          allLabel="Everyone"
+          [options]="ROLE_OPTIONS"
+          [selected]="roleSel()"
+          (selectionChange)="roleSel.set($event)"
+        />
+        @if (hasFilters()) {
+          <app-button
+            type="button"
+            [iconOnly]="true"
+            variant="outline"
+            icon="fa-solid fa-xmark"
+            (clicked)="clearFilters()"
+          >
+            Clear
+          </app-button>
+        }
       </div>
 
       @if (loading()) {
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 lg:grid-cols-2">
           @for (s of skeletons; track $index) {
             <div class="card-fb p-4">
               <div class="flex items-center gap-2 mb-3">
@@ -117,13 +135,27 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
           }
         </div>
       } @else if (sorted().length) {
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 lg:grid-cols-2">
           @for (a of sorted(); track a.id) {
             <div class="card-fb p-4">
               <div class="flex items-center gap-2 mb-2">
-                <div class="avatar-circle" [style.background]="tint(a.role)">
-                  {{ initial(a.name) }}
-                </div>
+                <!-- Selfie doubles as the avatar: seeing the face while reviewing is the point of
+                     this queue, so it's shown up front and opens full-size in the shared viewer.
+                     Falls back to the initials circle for accounts without one. -->
+                @if (a.selfieUrl) {
+                  <button
+                    type="button"
+                    class="avatar-selfie"
+                    [title]="'View ' + a.name + '’s selfie'"
+                    (click)="openSelfie(a)"
+                  >
+                    <img [src]="mediaUrl(a.selfieUrl)" [alt]="a.name" />
+                  </button>
+                } @else {
+                  <div class="avatar-circle" [style.background]="tint(a.role)">
+                    {{ initial(a.name) }}
+                  </div>
+                }
                 <div class="flex-1 min-w-0">
                   <div class="font-semibold text-sm truncate">{{ a.name }}</div>
                   <div class="text-muted text-xs truncate">
@@ -162,7 +194,7 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
                     @for (type of a.requiredDocumentTypes; track type) {
                       @if (hasDoc(a, type)) {
                         <button type="button" class="doc-link" (click)="openDocument(a, type)">
-                          <i class="fa-solid fa-up-right-from-square mr-1"></i>{{ docLabel(type) }}
+                          <i class="fa-solid mr-1" [class]="docLinkIcon(type)"></i>{{ docLabel(type) }}
                         </button>
                       } @else {
                         <span class="doc-missing">
@@ -272,8 +304,8 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
         <div class="card-fb p-5">
           <div class="flex items-center justify-between mb-3">
             <div class="font-bold text-sm">By status</div>
-            @if (status() !== 'all') {
-              <button type="button" class="fb-link text-xs" (click)="setStatus('all')">Clear</button>
+            @if (statusSel().length) {
+              <button type="button" class="fb-link text-xs" (click)="statusSel.set([])">Clear</button>
             }
           </div>
           @if (totalAccounts()) {
@@ -282,9 +314,9 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
                 <button
                   type="button"
                   class="fb-cat-row"
-                  [class.is-active]="status() === s.id"
-                  [attr.aria-pressed]="status() === s.id"
-                  (click)="setStatus(s.id)"
+                  [class.is-active]="statusSel().includes(s.id)"
+                  [attr.aria-pressed]="statusSel().includes(s.id)"
+                  (click)="toggleStatus(s.id)"
                 >
                   <span class="fb-cat-icon" [style.color]="s.color">
                     <i [class]="s.icon" aria-hidden="true"></i>
@@ -306,8 +338,8 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
         <div class="card-fb p-5">
           <div class="flex items-center justify-between mb-3">
             <div class="font-bold text-sm">By role</div>
-            @if (role() !== 'all') {
-              <button type="button" class="fb-link text-xs" (click)="setRole('all')">Clear</button>
+            @if (roleSel().length) {
+              <button type="button" class="fb-link text-xs" (click)="roleSel.set([])">Clear</button>
             }
           </div>
           @if (totalAccounts()) {
@@ -316,9 +348,9 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
                 <button
                   type="button"
                   class="fb-cat-row"
-                  [class.is-active]="role() === r.id"
-                  [attr.aria-pressed]="role() === r.id"
-                  (click)="setRole(r.id)"
+                  [class.is-active]="roleSel().includes(r.id)"
+                  [attr.aria-pressed]="roleSel().includes(r.id)"
+                  (click)="toggleRole(r.id)"
                 >
                   <span class="fb-cat-icon" [style.color]="r.color">
                     <i [class]="r.icon" aria-hidden="true"></i>
@@ -340,6 +372,39 @@ const ROLE_FILTERS: readonly { id: RoleFilter; label: string }[] = [
   `,
   styles: [
     `
+      app-multi-select {
+        flex: 0 1 auto;
+        min-width: 190px;
+      }
+      /* Selfie shown in place of the initials avatar — same footprint as .avatar-circle,
+         but a button so it's keyboard-focusable and opens the full-size viewer on click. */
+      .avatar-selfie {
+        flex: none;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 999px;
+        border: 1.5px solid var(--fb-line);
+        overflow: hidden;
+        cursor: pointer;
+        background: var(--fb-bg);
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      .avatar-selfie:hover {
+        border-color: var(--fb-primary);
+      }
+      .avatar-selfie:focus-visible {
+        outline: none;
+        box-shadow: var(--fb-ring);
+      }
+      .avatar-selfie img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
       .docs {
         padding: 8px 10px;
         margin-bottom: 12px;
@@ -383,21 +448,40 @@ export class Verifications {
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
 
-  protected readonly STATUS_FILTERS = STATUS_FILTERS;
-  protected readonly ROLE_FILTERS = ROLE_FILTERS;
+  protected readonly STATUS_OPTIONS = STATUS_OPTIONS;
+  protected readonly ROLE_OPTIONS = ROLE_OPTIONS.filter((o) => o.value !== 'Recipient'); // recipients are the only role that needs verification
   protected readonly skeletons = Array.from({ length: 6 });
+  /** Exposed for the template to absolutise the server-relative selfie URL against the API origin. */
+  protected readonly mediaUrl = mediaUrl;
 
+  /** Every loaded account; the two facets narrow it client-side into {@link filtered}. */
   protected readonly accounts = signal<AdminAccount[]>([]);
   protected readonly loading = signal(true);
-  protected readonly status = signal<StatusFilter>('all');
-  protected readonly role = signal<RoleFilter>('all');
+  /** Selected filter values (empty = no filter), owned here and fed to the dropdowns. */
+  protected readonly statusSel = signal<string[]>([]);
+  protected readonly roleSel = signal<string[]>([]);
   /** Id of the account whose verify/suspend call is in flight. */
   protected readonly busyId = signal<string | null>(null);
+
+  protected readonly hasFilters = computed(
+    () => !!(this.statusSel().length || this.roleSel().length),
+  );
+
+  /** The loaded accounts narrowed by the Status + Role multi-selects (empty facet = all). */
+  protected readonly filtered = computed<AdminAccount[]>(() => {
+    const statuses = new Set(this.statusSel());
+    const roles = new Set(this.roleSel());
+    return this.accounts().filter(
+      (a) =>
+        (!statuses.size || statuses.has(a.accountStatus)) &&
+        (!roles.size || roles.has(a.role)),
+    );
+  });
 
   /** Pending first — the queue this page exists to clear. */
   private readonly order: Record<string, number> = { Pending: 0, Verified: 1, Suspended: 2 };
   protected readonly sorted = computed(() =>
-    [...this.accounts()].sort(
+    [...this.filtered()].sort(
       (a, b) =>
         (this.order[a.accountStatus] ?? 9) - (this.order[b.accountStatus] ?? 9) ||
         // Within Pending, the accounts the admin can actually act on come before those still
@@ -416,7 +500,7 @@ export class Verifications {
     () => this.accounts().filter((a) => a.accountStatus === 'Pending').length,
   );
 
-  private readonly STATUS_META: readonly { id: StatusFilter; label: string; icon: string; color: string }[] = [
+  private readonly STATUS_META: readonly { id: StatusValue; label: string; icon: string; color: string; }[] = [
     { id: 'Pending', label: 'Pending', icon: 'fa-solid fa-hourglass-half', color: '#d97706' },
     { id: 'Verified', label: 'Verified', icon: 'fa-solid fa-circle-check', color: '#059669' },
     { id: 'Suspended', label: 'Suspended', icon: 'fa-solid fa-ban', color: '#dc2626' },
@@ -447,7 +531,7 @@ export class Verifications {
     return `conic-gradient(${segments.join(', ')})`;
   });
 
-  private readonly ROLE_META: readonly { id: RoleFilter; label: string; icon: string; color: string }[] = [
+  private readonly ROLE_META: readonly { id: RoleValue; label: string; icon: string; color: string; }[] = [
     { id: 'Volunteer', label: 'Volunteers', icon: 'fa-solid fa-hand-holding-heart', color: 'var(--fb-primary)' },
     { id: 'Recipient', label: 'Organizations', icon: 'fa-solid fa-building', color: '#2258c7' },
     { id: 'Donor', label: 'Donors', icon: 'fa-solid fa-user', color: '#7c3aed' },
@@ -474,12 +558,22 @@ export class Verifications {
     return type === 'IdProof' ? 'Photo ID' : type === 'Selfie' ? 'Selfie' : type;
   }
 
+  /** The selfie opens in the in-app viewer (image icon); other docs open in a new tab. */
+  protected docLinkIcon(type: string): string {
+    return type === 'Selfie' ? 'fa-image' : 'fa-up-right-from-square';
+  }
+
   /**
-   * Opens the file in a new tab. The list response only carries document *types*, not URLs, so the
-   * per-user verification endpoint is fetched on demand — the admin opens a handful of documents,
-   * not every URL on every page load.
+   * Opens a document. The selfie has its URL on the row already and is always an image, so it goes
+   * straight to the shared in-app viewer. Other documents (e.g. ID proof, which may be a PDF) aren't
+   * carried on the list row, so the per-user verification endpoint is fetched on demand — the admin
+   * opens a handful, not every URL on every page load — and opens in a new tab.
    */
   protected openDocument(a: AdminAccount, type: string): void {
+    if (type === 'Selfie' && a.selfieUrl) {
+      this.openSelfie(a);
+      return;
+    }
     this.users.getVerification(a.id).subscribe({
       next: (v) => {
         const doc = v.documents.find((d) => d.type === type);
@@ -499,35 +593,40 @@ export class Verifications {
     });
   }
 
+  /**
+   * Opens the selfie full-size in the shared image viewer. The URL is already on the row (batched
+   * into the list response), so unlike {@link openDocument} this needs no extra fetch.
+   */
+  protected openSelfie(a: AdminAccount): void {
+    if (a.selfieUrl) {
+      openImageDialog(this.dialog, { title: `${a.name} — selfie`, imageUrl: a.selfieUrl });
+    }
+  }
+
   constructor() {
     this.load();
   }
 
-  protected setStatus(f: StatusFilter): void {
-    if (this.status() !== f) {
-      this.status.set(f);
-      this.load();
-    }
+  /** Toggle a status value from an aside breakdown row (same effect as the dropdown). */
+  protected toggleStatus(id: string): void {
+    this.statusSel.set(toggle(this.statusSel(), id));
   }
 
-  protected setRole(f: RoleFilter): void {
-    if (this.role() !== f) {
-      this.role.set(f);
-      this.load();
-    }
+  /** Toggle a role value from an aside breakdown row. */
+  protected toggleRole(id: string): void {
+    this.roleSel.set(toggle(this.roleSel(), id));
   }
 
   protected clearFilters(): void {
-    this.status.set('all');
-    this.role.set('all');
-    this.load();
+    this.statusSel.set([]);
+    this.roleSel.set([]);
   }
 
   protected load(): void {
     this.loading.set(true);
-    const role = this.role() === 'all' ? undefined : this.role();
-    const status = this.status() === 'all' ? undefined : this.status();
-    this.admin.accounts(role, status).subscribe({
+    // Load the whole set once; the two facets filter it client-side, so a single
+    // request backs every combination of Status × Role selections.
+    this.admin.accounts(undefined, undefined, 1, LOAD_LIMIT).subscribe({
       next: (rows) => {
         this.accounts.set(rows);
         this.loading.set(false);
@@ -583,16 +682,18 @@ export class Verifications {
   }
 
   /**
-   * Swap in the server's row. If a status filter is active the account may no
-   * longer belong on screen, so drop it rather than show a row that contradicts
-   * the filter.
+   * Swap in the server's row. The card grid renders {@link filtered}, so if the
+   * new status no longer matches an active facet the row drops out of view on its
+   * own — the account stays in `accounts` and reappears when the filter widens.
+   *
+   * The verify/suspend response carries no documents, so its `selfieUrl` is null; keep the one we
+   * already loaded so the face thumbnail doesn't blink back to initials after an action.
    */
   private apply(updated: AdminAccount): void {
-    const filter = this.status();
     this.accounts.update((list) =>
-      filter !== 'all' && updated.accountStatus !== filter
-        ? list.filter((a) => a.id !== updated.id)
-        : list.map((a) => (a.id === updated.id ? updated : a)),
+      list.map((a) =>
+        a.id === updated.id ? { ...updated, selfieUrl: updated.selfieUrl ?? a.selfieUrl } : a,
+      ),
     );
   }
 

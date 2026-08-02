@@ -44,6 +44,12 @@ export interface AdminAccount {
    * Server-computed, so don't re-derive it from the two arrays above.
    */
   isReadyForReview: boolean;
+  /**
+   * The user's submitted selfie URL (server-relative, under `/uploads`), or null. Batched into the
+   * list response so the queue can show a face thumbnail without a per-row fetch. Absolutise with
+   * `mediaUrl` before use.
+   */
+  selfieUrl: string | null;
 }
 
 /**
