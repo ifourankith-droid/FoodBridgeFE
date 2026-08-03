@@ -134,3 +134,73 @@ describe('sessionExpiryInterceptor', () => {
     );
   });
 });
+
+/**
+ * Pins down the volunteer-registration bug: the token must be read from the signal, not from the
+ * localStorage copy an `effect()` writes a tick later.
+ *
+ * `register()` and `verifyOtp()` both set the token and navigate to `/app` in the same turn, so a
+ * component that fetches on load can beat that write. The interceptor used to read storage, so those
+ * requests went out unauthenticated, 401'd, and `sessionExpiryInterceptor` signed the user straight
+ * back out with "Your session has expired" — never reaching the dashboard. It presented as
+ * volunteer-only because the volunteer dashboard is the one that immediately calls
+ * `GET /users/{id}/verification` for its verification banner.
+ */
+describe('authTokenInterceptor', () => {
+  let http: HttpClient;
+  let httpMock: HttpTestingController;
+  let auth: AuthService;
+
+  const url = (path: string) => `/api/${path}`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([authTokenInterceptor])),
+        provideHttpClientTesting(),
+      ],
+    });
+    http = TestBed.inject(HttpClient);
+    httpMock = TestBed.inject(HttpTestingController);
+    auth = TestBed.inject(AuthService);
+    // Start from a clean slate: no token in the signal *or* in storage.
+    auth.token.set(null);
+    TestBed.inject(StorageService).removeItem('foodbridge.token');
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+    TestBed.inject(StorageService).removeItem('foodbridge.token');
+  });
+
+  it('attaches the token synchronously after token.set, before the storage effect flushes', () => {
+    // Exactly the register()/verifyOtp() sequence — set, then immediately fetch. No tick between.
+    auth.token.set('fresh.jwt.token');
+
+    http.get(url(API_ENDPOINTS.users.verification('abc'))).subscribe();
+
+    const req = httpMock.expectOne(url(API_ENDPOINTS.users.verification('abc')));
+    expect(req.request.headers.get('Authorization')).toBe('Bearer fresh.jwt.token');
+    req.flush({});
+  });
+
+  it('sends no Authorization header when there is no token', () => {
+    http.get(url(API_ENDPOINTS.auth.sendOtp)).subscribe();
+
+    const req = httpMock.expectOne(url(API_ENDPOINTS.auth.sendOtp));
+    expect(req.request.headers.has('Authorization')).toBeFalse();
+    req.flush({});
+  });
+
+  it('prefers the signal over a stale token left in storage', () => {
+    // The other half of the bug: a previous session's token in storage was attached and rejected.
+    TestBed.inject(StorageService).setItem('foodbridge.token', 'stale.jwt.token');
+    auth.token.set('current.jwt.token');
+
+    http.get(url(API_ENDPOINTS.dashboard.volunteer)).subscribe();
+
+    const req = httpMock.expectOne(url(API_ENDPOINTS.dashboard.volunteer));
+    expect(req.request.headers.get('Authorization')).toBe('Bearer current.jwt.token');
+    req.flush({});
+  });
+});
