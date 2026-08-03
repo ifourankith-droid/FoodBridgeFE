@@ -48,7 +48,11 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
           class="grid gap-4 items-start"
           [ngClass]="isDonor() ? 'lg:grid-cols-2 max-w-5xl' : 'max-w-xl'"
         >
-          <form [formGroup]="form" class="card-fb p-5">
+          <!-- min-w-0: a grid item defaults to min-width:auto, so this card could
+               not shrink below its widest unbreakable child and dragged the single
+               column to 468px inside a 328px container — 124px of horizontal scroll
+               on a 360px phone, on every card in the grid, not just this one. -->
+          <form [formGroup]="form" class="card-fb p-5 min-w-0">
           <!-- Identity block. The name gets its own line so a long org name can
                never collide with the status badge, and the meta row below keeps
                role / city / status on one baseline. -->
@@ -124,7 +128,8 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
         </form>
 
         @if (isDonor()) {
-          <div class="card-fb p-5">
+          <!-- min-w-0 for the same reason as the form above. -->
+          <div class="card-fb p-5 min-w-0">
             <div class="card-head">
               <div class="card-head-title">
                 <span class="card-head-icon">
@@ -152,45 +157,53 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
             }
             <div class="space-y-2">
               @for (a of pickup.addresses(); track a.id) {
+                <!-- Two groups, not one flat row: the controls have to wrap below the
+                     address as a block. Flat, they wrapped one button at a time and
+                     squeezed the address down to a useless truncated stub. -->
                 <div class="addr-row" [class.sel]="isDefault(a)">
-                  <i class="fa-solid mr-2 shrink-0" [class]="isDefault(a) ? 'fa-circle-check text-primary' : 'fa-location-dot text-muted'"></i>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-semibold truncate">{{ a.label }}</div>
-                    <div class="text-xs text-muted truncate">{{ oneLine(a) }}</div>
+                  <div class="addr-main">
+                    <i class="fa-solid shrink-0" [class]="isDefault(a) ? 'fa-circle-check text-primary' : 'fa-location-dot text-muted'"></i>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-semibold truncate">{{ a.label }}</div>
+                      <div class="text-xs text-muted truncate">{{ oneLine(a) }}</div>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    class="addr-switch shrink-0"
-                    [class.on]="isDefault(a)"
-                    [attr.aria-checked]="isDefault(a)"
-                    [disabled]="isDefault(a) || settingDefaultId() === a.id"
-                    [title]="isDefault(a) ? 'Default pickup address' : 'Set as default'"
-                    (click)="setDefault(a, $event)"
-                  >
-                    <span class="knob"></span>
-                    <span class="addr-switch-text">
-                      @if (settingDefaultId() === a.id) {
-                        <i class="fa-solid fa-spinner fa-spin"></i>&nbsp;Saving…
-                      } @else {
-                        {{ isDefault(a) ? 'Default' : 'Set default' }}
-                      }
-                    </span>
-                  </button>
-                  @if (confirmRemoveId() === a.id) {
-                    <span class="addr-confirm-text">Remove?</span>
-                    <button type="button" class="addr-x addr-x-danger" title="Confirm remove" [disabled]="removingId() === a.id" (click)="removeAddr(a.id, $event)">
-                      @if (removingId() === a.id) {
-                        <i class="fa-solid fa-spinner fa-spin"></i>
-                      } @else {
-                        <i class="fa-solid fa-check"></i>
-                      }
+
+                  <div class="addr-actions">
+                    <button
+                      type="button"
+                      role="switch"
+                      class="addr-switch shrink-0"
+                      [class.on]="isDefault(a)"
+                      [attr.aria-checked]="isDefault(a)"
+                      [disabled]="isDefault(a) || settingDefaultId() === a.id"
+                      [title]="isDefault(a) ? 'Default pickup address' : 'Set as default'"
+                      (click)="setDefault(a, $event)"
+                    >
+                      <span class="knob"></span>
+                      <span class="addr-switch-text">
+                        @if (settingDefaultId() === a.id) {
+                          <i class="fa-solid fa-spinner fa-spin"></i>&nbsp;Saving…
+                        } @else {
+                          {{ isDefault(a) ? 'Default' : 'Set default' }}
+                        }
+                      </span>
                     </button>
-                    <button type="button" class="addr-x" title="Keep address" (click)="cancelRemove($event)"><i class="fa-solid fa-xmark"></i></button>
-                  } @else {
-                    <button type="button" class="addr-x" title="Edit" (click)="startEdit(a, $event)"><i class="fa-solid fa-pen"></i></button>
-                    <button type="button" class="addr-x" title="Remove" (click)="askRemove(a.id, $event)"><i class="fa-solid fa-trash-can"></i></button>
-                  }
+                    @if (confirmRemoveId() === a.id) {
+                      <span class="addr-confirm-text">Remove?</span>
+                      <button type="button" class="addr-x addr-x-danger" title="Confirm remove" [disabled]="removingId() === a.id" (click)="removeAddr(a.id, $event)">
+                        @if (removingId() === a.id) {
+                          <i class="fa-solid fa-spinner fa-spin"></i>
+                        } @else {
+                          <i class="fa-solid fa-check"></i>
+                        }
+                      </button>
+                      <button type="button" class="addr-x" title="Keep address" (click)="cancelRemove($event)"><i class="fa-solid fa-xmark"></i></button>
+                    } @else {
+                      <button type="button" class="addr-x" title="Edit" (click)="startEdit(a, $event)"><i class="fa-solid fa-pen"></i></button>
+                      <button type="button" class="addr-x" title="Remove" (click)="askRemove(a.id, $event)"><i class="fa-solid fa-trash-can"></i></button>
+                    }
+                  </div>
                 </div>
               } @empty {
                 @if (!pickup.loading()) {
@@ -373,6 +386,7 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
     .addr-row {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 10px 12px;
       border-radius: 12px;
@@ -380,6 +394,40 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
       transition:
         border-color 0.15s ease,
         background 0.15s ease;
+    }
+    /* The label + address. Takes the leftover space and truncates rather than
+       carrying a wrap-triggering basis: a basis wide enough to force the wrap on a
+       phone also tripped it on desktop for whichever rows happened to say "Set
+       default" (wider than "Default"), leaving one row stacked and its neighbour
+       not. The breakpoint below decides the wrap instead, so it is the same for
+       every row. */
+    .addr-main {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    /* margin-left:auto pins the controls right while they still share the line. */
+    .addr-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+    @media (max-width: 640px) {
+      /* Full width forces the wrap outright rather than leaving it to the basis,
+         so the controls sit on their own line on every phone regardless of how
+         long the address happens to be. */
+      .addr-main {
+        flex-basis: 100%;
+      }
+      .addr-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-end;
+      }
     }
     .addr-row.sel {
       border-color: var(--fb-primary);

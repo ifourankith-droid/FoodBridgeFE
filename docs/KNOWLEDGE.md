@@ -6,6 +6,91 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## Profile on mobile: 124px of horizontal scroll, and a crushed address row
+
+**Done by me on 2026-08-03**
+
+### It was not the address row
+Reported as "the address section creates horizontal scroll". Measured on the real
+page at a 360px viewport (dev session + CDP device emulation), the address rows had
+`scrollWidth - clientWidth === 0`. They were not overflowing at all.
+
+The page was: **124px** at 360px, **95px** at 390px — the same ~484px content box
+either way, i.e. a fixed floor rather than anything responsive.
+
+The chain located it:
+
+```
+div.grid.gap-4.items-start   w=328   gridTemplateColumns: 467.766px   <-- track wider than container
+  form.card-fb.p-5           w=468   minW=auto
+```
+
+A **grid item defaults to `min-width: auto`**, so the single auto column could not
+shrink below the widest unbreakable thing inside the card and dragged the track to
+467.77px inside a 328px container. Every card in that grid inherited the width, the
+address card included — which is why it looked like the address section's fault.
+
+Confirmed before writing any code by setting `min-width: 0` on the two grid items
+live: page overflow 124 → 0, track 467.77px → 328px.
+
+### Both fixes
+- **`min-w-0`** on the two grid children (the details `<form>` and the pickup-address
+  `<div>`). This is the actual scroll fix.
+- **`.addr-row` split into `.addr-main` + `.addr-actions`**, wrapping. Flat, the row
+  wrapped one button at a time and squeezed the address to a truncated stub; grouped,
+  the whole control block drops to its own line.
+
+### Why the wrap is driven by the breakpoint, not a flex-basis
+The first attempt used `flex: 1 1 220px` on `.addr-main` and let the basis trigger the
+wrap. At 1280px that made **one row stack and its neighbour not** — rows reading "Set
+default" are wider than rows reading "Default", so they crossed the threshold and their
+neighbours didn't. Ragged. Now `.addr-main` is `flex: 1 1 auto; min-width: 0` and the
+`max-width: 640px` query alone decides, so every row in a card agrees.
+
+Verified on the real page: overflow 0 at 360 / 414 / 640 / 768 / 1280, rows 94px (wrapped)
+at ≤640 and 58px (one line) at ≥768, both rows matching at every width.
+
+---
+
+## New Donation: post from your current location
+
+**Done by me on 2026-08-03**
+
+### Problem
+A donation's pickup could only be a **saved** address. Two consequences: a donor with
+an empty address book was hard-blocked from posting at all (the form offered only
+"Add a pickup address on your Profile page"), and a donor at a venue they will never
+revisit had to save a throwaway address to get past the form.
+
+### Change
+`pickupOptions` gains a final `__current__` entry — the same sentinel-option idiom the
+confirm-delivery dialog uses for "Somewhere else — add a new spot". Choosing it
+reveals a `LocationPicker` (map + GPS + reverse geocoding) inside the form, and the
+listing posts on the freeform `pickupAddress`/`latitude`/`longitude` trio that
+`pickupPayload` already supported.
+
+- The option is **always present**, so the address book being empty is no longer a
+  dead end; the select is now rendered even with zero saved addresses.
+- A map rather than a bare GPS grab: this address is what a volunteer navigates to,
+  and a fix taken indoors can land across the block with nothing on screen to reveal it.
+- `pickupAddress` falls back to `lat, lng` if geocoding returns nothing — that text is
+  how a volunteer finds the place, so it must never be empty.
+- The point is **not** saved to the address book. It belongs to this listing only.
+
+### The trap — and it is a quiet one
+`pickup.selected()` still holds whatever saved address was last active; choosing
+"current location" never clears it. So `pickupPayload`'s existing
+`if (serverBacked && saved) return { donorAddressId }` branch would have won, dropping
+the marked point and **posting the donation at the donor's saved address**, with
+nothing on screen to show it. Hence the explicit `!this.useCurrentLocation()` in that
+condition. `create-listing.spec.ts` asserts the emitted body directly, because this
+failure is invisible from the UI.
+
+Same shape as the `center` vs `location` split in the delivery dialog: a value the
+form is *holding* is not the value the user *chose*.
+
+---
+
 ## Login: a real loading state for "Send OTP"
 
 **Done by me on 2026-08-03**

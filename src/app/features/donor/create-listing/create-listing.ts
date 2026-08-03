@@ -1,5 +1,14 @@
 import { Location } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -8,6 +17,7 @@ import { DietType, FreshnessTag, ListingWriteBody, MealType } from '@core/models
 import { DonorDashboard } from '@core/models/dashboard.model';
 import { DashboardService } from '@core/services/dashboard.service';
 import { DialogService } from '@core/services/dialog.service';
+import type { GeoAddress } from '@core/services/geocoding.service';
 import { ListingService } from '@core/services/listing.service';
 import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
 import { ToastService } from '@core/services/toast.service';
@@ -17,14 +27,23 @@ import { FbDatePicker } from '@shared/ui/date-picker/date-picker';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { ImagePicker } from '@shared/ui/image-picker/image-picker';
 import { FbInput, FbSelectOption } from '@shared/ui/input/input';
+import { LocationPicker } from '@shared/ui/location-picker/location-picker';
+import type { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { FbSelect } from '@shared/ui/select/select';
 import { appZonedInputToOffsetIso, appZonedNowInput, utcIsoToAppZonedInput } from '@shared/util/timezone';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 import { DonationConsentDialog } from './donation-consent-dialog';
 
+/**
+ * Sentinel option value for "post from where I am standing". Not a real address id —
+ * it deliberately never reaches `PickupAddressService`, because this point is a
+ * one-off for this listing and saving it would clutter the donor's address book.
+ */
+const CURRENT_LOCATION = '__current__';
+
 @Component({
   selector: 'app-create-listing',
-  imports: [ReactiveFormsModule, FbInput, FbSelect, FbDatePicker, FbButton, ImagePicker, PageWrapper, FbAutofocus],
+  imports: [ReactiveFormsModule, FbInput, FbSelect, FbDatePicker, FbButton, ImagePicker, LocationPicker, PageWrapper, FbAutofocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
@@ -49,7 +68,10 @@ import { DonationConsentDialog } from './donation-consent-dialog';
                 <i class="fa-solid fa-location-dot text-primary"></i>
                 <span class="flex-1 text-sm font-medium truncate">{{ activeAddress()?.label }}</span>
               </div>
-            } @else if (pickup.addresses().length) {
+            } @else {
+              <!-- Always rendered now, even with no saved addresses: the list always
+                   carries "Use my current location", which is the one option that
+                   needs nothing set up in advance. -->
               <div class="flex items-stretch gap-2">
                 <app-select
                   class="flex-1 min-w-0"
@@ -69,12 +91,42 @@ import { DonationConsentDialog } from './donation-consent-dialog';
                   <i class="fa-solid fa-plus"></i>
                 </button>
               </div>
-            } @else {
-              <button type="button" class="addr-banner is-empty w-full text-left" (click)="addAddress()">
-                <i class="fa-solid fa-circle-plus text-primary"></i>
-                <span class="flex-1 text-sm">Add a pickup address on your Profile page</span>
-                <i class="fa-solid fa-arrow-right text-muted text-xs"></i>
-              </button>
+
+              @if (useCurrentLocation()) {
+                <!-- A map, not a bare GPS grab: this address is what a volunteer
+                     navigates to, and a fix taken indoors can land on the wrong
+                     side of a block with nothing on screen to reveal it. -->
+                <div class="gps-spot mt-2">
+                  <app-location-picker
+                    [location]="gpsCoords()"
+                    [height]="200"
+                    [zoom]="16"
+                    [autoLocate]="true"
+                    buttonLabel="Use my current location"
+                    placeholderText="Mark the pickup point"
+                    permissionPrompt="Turn on location to set the pickup point"
+                    coordsLabel="Pickup at"
+                    emptyHint="Drag the pin — or tap the map — to mark where the food is."
+                    (locationChange)="onGpsPin($event)"
+                    (addressResolved)="onGpsAddress($event)"
+                  />
+                  @if (gpsLabel(); as label) {
+                    <p class="fb-help !mt-0">
+                      <i class="fa-solid fa-check mr-1 text-success"></i>{{ label }}
+                    </p>
+                  }
+                </div>
+              } @else if (!pickup.addresses().length) {
+                <button
+                  type="button"
+                  class="addr-banner is-empty w-full text-left mt-2"
+                  (click)="addAddress()"
+                >
+                  <i class="fa-solid fa-circle-plus text-primary"></i>
+                  <span class="flex-1 text-sm">Or save a reusable pickup address on your Profile</span>
+                  <i class="fa-solid fa-arrow-right text-muted text-xs"></i>
+                </button>
+              }
             }
           </div>
 
@@ -216,6 +268,16 @@ import { DonationConsentDialog } from './donation-consent-dialog';
       border-radius: 12px;
       background: var(--fb-primary-soft);
       border: 1px solid var(--fb-primary);
+    }
+    /* Dashed, matching the delivery dialog's "add a new spot" block — both are the
+       same idea: a one-off place being described rather than one already saved. */
+    .gps-spot {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px;
+      border: 1px dashed var(--fb-line);
+      border-radius: 12px;
     }
     .addr-banner.is-empty {
       background: var(--fb-orange-soft);
@@ -362,18 +424,64 @@ export class CreateListing {
 
   /** Pickup address used for the listing — the edited listing's, else the top-bar selection. */
   private readonly editAddress = signal<{ label: string; latitude: number; longitude: number; } | null>(null);
-  protected readonly activeAddress = computed(() => this.editAddress() ?? this.pickup.selected());
+
+  // ---- "Use my current location" ----
+
+  /** The point the donor marked, or null until they actually mark one. */
+  protected readonly gpsCoords = signal<FbLatLng | null>(null);
+  /** Reverse-geocoded text for {@link gpsCoords} — what volunteers will read. */
+  protected readonly gpsLabel = signal('');
+  /** Mirror of `pickupCtrl.value`, because the control is also written to silently. */
+  private readonly pickupValue = signal<string | null>(null);
+  protected readonly useCurrentLocation = computed(() => this.pickupValue() === CURRENT_LOCATION);
+
+  /**
+   * The pickup this listing will carry. Editing keeps the listing's own stored
+   * address; otherwise it is either the marked point or the selected saved address.
+   *
+   * Null while "current location" is chosen but unmarked — that is what keeps
+   * {@link submit} from posting a listing with no pickup point.
+   */
+  protected readonly activeAddress = computed(() => {
+    const edited = this.editAddress();
+    if (edited) {
+      return edited;
+    }
+    if (this.useCurrentLocation()) {
+      const point = this.gpsCoords();
+      if (!point) {
+        return null;
+      }
+      // Coordinates as the label only if geocoding gave nothing — the field is what
+      // a volunteer reads to find the place, so it must never be empty.
+      return {
+        label: this.gpsLabel() || `${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`,
+        latitude: point.lat,
+        longitude: point.lng,
+      };
+    }
+    return this.pickup.selected();
+  });
 
   /** Dropdown of the donor's saved pickup addresses (create mode), synced with the shared selection. */
   protected readonly pickupCtrl = new FormControl<string | null>(null);
-  protected readonly pickupOptions = computed<FbSelectOption[]>(() =>
-    this.pickup.addresses().map((a) => ({
+  protected readonly pickupOptions = computed<FbSelectOption[]>(() => [
+    ...this.pickup.addresses().map((a) => ({
       value: a.id,
       label: a.label,
       description: a.address,
       icon: 'fa-solid fa-location-dot',
     })),
-  );
+    // Last, and always present: a donor with no saved address at all could not post
+    // before this existed, and one delivering from a venue they will never revisit
+    // had to save a throwaway address first.
+    {
+      value: CURRENT_LOCATION,
+      label: 'Use my current location',
+      description: 'A one-off pickup point for this donation',
+      icon: 'fa-solid fa-location-crosshairs',
+    },
+  ]);
 
   protected readonly fieldErrors = signal<Record<string, string>>({});
 
@@ -405,10 +513,27 @@ export class CreateListing {
     // Mirror the shared pickup selection into the dropdown (topbar/profile can change it).
     effect(() => {
       const selectedId = this.pickup.selected()?.id ?? null;
+      // Never yank the donor out of the current-location branch: the shared selection
+      // re-emits for reasons of its own (topbar, profile, a refetch), and doing so
+      // would silently swap the point they marked for a saved address.
+      // `untracked` so writing pickupValue below can't re-trigger this effect.
+      if (untracked(this.pickupValue) === CURRENT_LOCATION) {
+        return;
+      }
       this.pickupCtrl.setValue(selectedId, { emitEvent: false });
+      this.pickupValue.set(selectedId);
     });
     // Choosing an address in the dropdown makes it the active/default pickup address.
     this.pickupCtrl.valueChanges.pipe(takeUntilDestroyed()).subscribe((id) => {
+      this.pickupValue.set(id);
+      if (id === CURRENT_LOCATION) {
+        // Nothing to select server-side — this point belongs to this listing only.
+        return;
+      }
+      // Leaving the branch discards the marked point. Keeping it would let a later
+      // submit send coordinates the form is no longer showing anywhere.
+      this.gpsCoords.set(null);
+      this.gpsLabel.set('');
       if (id && id !== this.pickup.selected()?.id) {
         this.pickup.select(id).subscribe();
       }
@@ -452,6 +577,21 @@ export class CreateListing {
   }
 
   /**
+   * The donor marked a pickup point (GPS, drag or tap). Clears the resolved text so
+   * a moved pin can't keep the previous street's name — the picker re-geocodes and
+   * `onGpsAddress` fills it back in.
+   */
+  protected onGpsPin(point: FbLatLng): void {
+    this.gpsCoords.set(point);
+    this.gpsLabel.set('');
+  }
+
+  /** Reverse-geocoded address for the marked point; becomes the listing's pickup text. */
+  protected onGpsAddress(address: GeoAddress): void {
+    this.gpsLabel.set([address.address, address.city].filter(Boolean).join(', '));
+  }
+
+  /**
    * Held until submit, then uploaded once the listing has an id — the image
    * endpoint is keyed on the listing, so it cannot be sent with the form.
    */
@@ -483,7 +623,12 @@ export class CreateListing {
     if (firstError || !address) {
       this.toast.show(
         'fa-solid fa-triangle-exclamation',
-        firstError || 'Choose a pickup address from the top-bar selector',
+        firstError ||
+        // Only one of these is actionable at a time, and pointing at the wrong
+        // one sends the donor to a selector they have already used.
+        (this.useCurrentLocation()
+          ? 'Mark the pickup point on the map'
+          : 'Choose a pickup address'),
       );
       return;
     }
@@ -593,7 +738,12 @@ export class CreateListing {
     active: PickupAddress | { label: string; latitude: number; longitude: number; },
   ): Pick<ListingWriteBody, 'donorAddressId' | 'pickupAddress' | 'latitude' | 'longitude'> {
     const saved = this.pickup.selected();
-    if (!this.editAddress() && this.pickup.serverBacked() && saved) {
+    // `useCurrentLocation` has to be excluded here explicitly. `pickup.selected()`
+    // still holds whatever saved address was last active — choosing "current
+    // location" never clears it — so without this guard the marked point would be
+    // dropped and the listing posted at the donor's saved address instead, with
+    // nothing on screen to show it had happened.
+    if (!this.editAddress() && !this.useCurrentLocation() && this.pickup.serverBacked() && saved) {
       return { donorAddressId: saved.id };
     }
     // Saved addresses carry the full text in `address`; the edited listing's own in `label`.

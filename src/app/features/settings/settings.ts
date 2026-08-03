@@ -49,7 +49,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
             }
           </div>
         </div>
-        <div class="flex justify-between items-center py-3">
+        <!-- <div class="flex justify-between items-center py-3">
           <div>
             <div class="text-sm font-semibold">Push Notifications</div>
             <div class="text-muted text-xs">New listings, claims, confirmations</div>
@@ -62,7 +62,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
             <div class="text-muted text-xs">Weekly summary of your activity</div>
           </div>
           <button class="fb-switch" (click)="noop()" role="switch" aria-checked="false"><span class="knob"></span></button>
-        </div>
+        </div> -->
       </div>
     </app-page-wrapper>
   `,
