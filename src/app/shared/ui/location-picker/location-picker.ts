@@ -57,6 +57,15 @@ import { FbLatLng, FbMapConfig } from '@shared/ui/map/fb-map.model';
         >
           {{ buttonLabel() }}
         </app-button>
+
+        <!-- Outlives the toast on purpose. Where the device simply cannot produce
+             a fix, this button fails every single time — a notice that vanishes
+             after three seconds just invites another press. -->
+        @if (gpsError(); as e) {
+          <p class="text-amber-600 dark:text-amber-400 text-xs mt-2">
+            <i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>{{ e }}
+          </p>
+        }
       </div>
     }
 
@@ -82,6 +91,14 @@ export class LocationPicker implements OnInit {
 
   /** Controlled location — drives the initial pin and the coordinate line. */
   readonly location = input<FbLatLng | null>(null);
+  /**
+   * Where to look before anything is picked, when that isn't the world default.
+   * Kept apart from {@link location} on purpose: the picker always *draws* a pin,
+   * but a pin the map merely started on is not a choice the user made — folding
+   * the two together makes the coordinate line claim a location was set when it
+   * wasn't. Ignored once a point is actually picked.
+   */
+  readonly center = input<FbLatLng | null>(null);
   readonly height = input(240);
   readonly zoom = input(15);
   readonly placeholderText = input('Confirm your location');
@@ -108,12 +125,15 @@ export class LocationPicker implements OnInit {
   protected readonly busy = signal(false);
   /** The point currently shown, kept in sync with the `location` input until moved. */
   protected readonly current = signal<FbLatLng | null>(null);
+  /** Why the last GPS attempt failed, or '' — shown under the button until it succeeds. */
+  protected readonly gpsError = signal('');
 
   protected readonly mapConfig = computed<FbMapConfig>(() => ({
     mode: 'picker',
     height: this.height(),
     zoom: this.zoom(),
-    initialLocation: this.current() ?? this.location() ?? environment.mapDefaultCenter,
+    initialLocation:
+      this.current() ?? this.location() ?? this.center() ?? environment.mapDefaultCenter,
     clickToPlace: true,
     placeholderText: this.placeholderText(),
   }));
@@ -144,9 +164,11 @@ export class LocationPicker implements OnInit {
 
   protected captureGps(): void {
     if (!this.geolocation.supported) {
+      this.gpsError.set('This browser has no location service — set the point on the map.');
       this.toast.warning('Geolocation is not supported on this device.');
       return;
     }
+    this.gpsError.set('');
     this.busy.set(true);
     this.geolocation.current().subscribe({
       next: (loc) => this.setLocation(loc, true),
@@ -159,15 +181,25 @@ export class LocationPicker implements OnInit {
               this.captureGps();
             }
           });
-        } else {
-          this.toast.warning('Could not read your location — drop a pin on the map instead.');
+          return;
         }
+        // Keep the reason GeolocationService worked out. "Your location is
+        // currently unavailable" (no Wi-Fi or GPS radio for the browser to
+        // locate from — common on a wired desktop, and permanent there) and
+        // "Getting your location timed out" (worth another press) call for
+        // opposite responses from the user, and the single generic line this
+        // replaced told them which one it was: neither.
+        const reason = `${err.message} — set the point on the map instead.`;
+        this.gpsError.set(reason);
+        this.toast.warning(reason);
       },
     });
   }
 
   /** Adopt a new point: recentre the pin, emit it, then reverse-geocode → address. */
   private setLocation(pos: FbLatLng, fromGps: boolean): void {
+    // Any point at all clears the notice — dropping a pin is the recovery it asks for.
+    this.gpsError.set('');
     this.current.set(pos);
     this.locationChange.emit(pos);
     this.geocoding.reverseGeocode(pos.lat, pos.lng).subscribe({

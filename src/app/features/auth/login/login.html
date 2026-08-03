@@ -21,13 +21,28 @@
     />
 
     <div class="mt-5">
-      <app-button type="submit" icon="fa-solid fa-paper-plane" [block]="true">Send OTP</app-button>
+      <!-- The label changes with the state, not just the spinner: on a slow
+           network the icon alone doesn't say whether the press registered. -->
+      <app-button
+        type="submit"
+        icon="fa-solid fa-paper-plane"
+        [block]="true"
+        [loading]="sending()"
+        >{{ sending() ? 'Sending OTP…' : 'Send OTP' }}</app-button
+      >
     </div>
   </form>
 
   <p class="text-right text-sm text-muted mt-4">
     Don't have an account?
-    <button type="button" class="fb-link ml-1" (click)="goToRegister()">Create account</button>
+    <button
+      type="button"
+      class="fb-link ml-1"
+      [disabled]="sending()"
+      (click)="goToRegister()"
+    >
+      Create account
+    </button>
   </p>
 
   <p class="auth-fineprint">

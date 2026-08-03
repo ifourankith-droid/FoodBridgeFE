@@ -6,6 +6,121 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## Login: a real loading state for "Send OTP"
+
+**Done by me on 2026-08-03**
+
+### Problem
+`login.html` carried `<app-button loading="" …>`. As a *static attribute* that
+assigns the **string** `''` to a `boolean` input — always falsy, so the spinner
+could never appear, and nothing else tracked the request either. Pressing Send OTP
+left the screen completely inert while the SMS round-trip ran.
+
+That matters more here than on most screens: Enter submits the form, so an
+impatient second press sent a **second OTP**. Sends are rate-limited per number
+(`OtpRateLimit:MaxSendsPerWindow`), so it was the *retry* that failed — on a screen
+that gave no sign the first press had done anything.
+
+### Change
+- **`login.ts`** — a `sending` signal, set through `setSending()` so the flag and
+  the field move together. Guards re-entry in `sendOtp()` and in `goToRegister()`.
+  - The field is disabled **through the form control**, not an input on
+    `<app-input>`: that's what reaches `FbInput.setDisabledState`. The number must
+    not drift from the one the OTP was actually sent to.
+  - On success the busy state is **held across the navigation**
+    (`router.navigate(...).finally(...)`) rather than cleared in `next` — clearing
+    on the response flashes an idle, pressable button for the frames before the OTP
+    screen renders. `finally` still fires if a guard blocks the route, so the form
+    can't be left permanently locked.
+- **`login.html`** — `[loading]="sending()"`, and the label swaps to "Sending OTP…";
+  on a slow network a spinner alone doesn't say whether the press registered. The
+  "Create account" link is disabled while in flight.
+- **`styles.scss`** — `.fb-link:disabled` styling, placed **after** `.fb-link:hover`:
+  same specificity, so source order is what stops a disabled link underlining
+  itself under the cursor.
+- `login.spec.ts` (new) covers the busy state, the double-submit guard, release on
+  failure, and that the state survives until navigation resolves.
+
+---
+
+## "Use current location" on a machine that has no way to locate itself
+
+**Done by me on 2026-08-03**
+
+### What was reported
+"Use current location" failed every time with
+*"Could not read your location — drop a pin on the map instead."*
+
+### What it actually was
+Not a code fault. The dev machine is a **wired desktop with no wireless adapter**
+(`Get-NetAdapter` → Ethernet only). Windows location was allowed and `lfsvc` was
+running, so nothing was blocked — but Chrome geolocates from nearby Wi-Fi access
+points, and with no radio there is nothing to scan and nothing to send to Google's
+network-location endpoint. It returns `POSITION_UNAVAILABLE` (code 2, so
+`denied: false`) on every attempt. **On that hardware the button cannot ever
+succeed**; the map is the only route, which is why it exists.
+
+Worth knowing before chasing this again: the same message on a *laptop* is a
+different fault. `denied: false` means "no fix", never "blocked" — a blocked
+permission is code 1 and takes the `LocationPermissionService` modal instead.
+
+### What was wrong, and is now fixed
+`LocationPicker.captureGps` threw away the reason. `GeolocationService.messageFor`
+already distinguishes unavailable / timed-out / blocked, and the catch replaced all
+of it with one fixed string — so the message could never say which had happened,
+and a permanent hardware limit looked identical to a transient timeout.
+
+- **`src/app/shared/ui/location-picker/location-picker.ts`**
+  - The toast now carries `err.message`: *"Your location is currently unavailable —
+    set the point on the map instead."*
+  - New `gpsError` signal renders the same line **under the button and leaves it
+    there**. A toast dismisses itself after ~3s, which on a device that always
+    fails just invites another press. Any point set on the map clears it.
+- `location-picker.spec.ts` (new) covers both failure codes and the success path.
+
+---
+
+## Confirm delivery: a map for the "add a new spot" branch
+
+**Done by me on 2026-08-03**
+
+### Problem
+Adding a new drop-off spot offered only a "Use my location" button and a printed
+lat/lng pair. Nothing could be checked or corrected: if GPS was off by a street
+the volunteer had no way to see it, and no way to fix it. That spot is then saved
+and **suggested to every volunteer delivering nearby**, so a bad coordinate keeps
+costing after the delivery it came from.
+
+### Change
+- **`src/app/shared/ui/delivery-dialog/delivery-dialog.ts`** — the new-spot branch
+  now renders the shared `LocationPicker` (draggable/tappable pin, GPS button with
+  the blocked-permission modal, reverse geocoding). Dropped the hand-rolled
+  button, `useMyLocation()`, the `locating` signal and the `GeolocationService` /
+  `ToastService` injections — the shared component covers all of it.
+  - `autoLocate` is on: the volunteer is standing at the drop-off, so the common
+    case should be "confirm the pin", not "find yourself on a map".
+  - The reverse-geocoded address now fills `DropOffSelection.address`. That field
+    was already on the wire contract and already forwarded by
+    `ListingService.dropOffForm`, but **nothing ever set it** — new spots were
+    saved with a coordinate and no readable address.
+- **`src/app/shared/ui/location-picker/location-picker.ts`** — new optional
+  `center` input.
+
+### The one trap here
+`center` and `location` must stay separate. The picker **always draws its pin**, so
+the map needs a starting point (here: the listing's pickup area). Feeding that in
+as `location` would make it a *chosen* value — the coordinate line would announce
+"Pin set at …" before the user touched anything, and Confirm would accept the
+**pickup** address as the drop-off. So `newCoords` stays null until a real
+drag/tap/GPS fix, and that alone gates submission. `delivery-dialog.spec.ts` pins
+this, plus the stale-address clear when the pin moves.
+
+Note the map only renders where a Google Maps key exists —
+`environment.prod.ts` has `googleMapsApiKey: ''`, so in production this degrades
+to the "add an API key" placeholder like every other map in the app.
+
+---
+
 ## Toast: a successful cancel reported "Something went wrong"
 
 **Done by me on 2026-08-03**

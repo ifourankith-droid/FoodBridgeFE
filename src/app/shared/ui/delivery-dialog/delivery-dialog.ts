@@ -5,15 +5,14 @@ import { Observable, tap } from 'rxjs';
 import { DropOffHotspot } from '@core/models/dropoff-location.model';
 import type { DropOffSelection } from '@core/services/listing.service';
 import { DropOffLocationService } from '@core/services/dropoff-location.service';
-import { GeolocationService } from '@core/services/geolocation.service';
 import type { DialogService } from '@core/services/dialog.service';
-import { ToastService } from '@core/services/toast.service';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
-import { FbButton } from '@shared/ui/button/button';
 import { FbInput, FbSelectOption } from '@shared/ui/input/input';
 import { FbSelect } from '@shared/ui/select/select';
 import { IMAGE_ACCEPT, ImagePicker } from '@shared/ui/image-picker/image-picker';
+import { LocationPicker } from '@shared/ui/location-picker/location-picker';
+import type { FbLatLng } from '@shared/ui/map/fb-map.model';
 
 /** Sentinel option value for the "add a new spot" branch. */
 const NEW_SPOT = '__new__';
@@ -46,11 +45,11 @@ export interface DeliveryDialogData {
  * Its own component rather than an extension of the shared {@link ImagePicker}-only photo
  * dialog, because this is the one confirmation that collects a second, quite different piece
  * of information — and the drop-off list needs to load asynchronously and offer a
- * "somewhere new" branch with GPS capture.
+ * "somewhere new" branch carrying its own {@link LocationPicker} map.
  */
 @Component({
   selector: 'app-delivery-dialog',
-  imports: [ImagePicker, FbButton, FbInput, FbSelect, ReactiveFormsModule],
+  imports: [ImagePicker, FbInput, FbSelect, LocationPicker, ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-col gap-5">
@@ -88,25 +87,35 @@ export interface DeliveryDialogData {
               [required]="true"
               [formControl]="nameControl"
             />
-            <div class="flex items-center gap-2">
-              <app-button
-                variant="outline"
-                size="sm"
-                icon="fa-solid fa-location-crosshairs"
-                [loading]="locating()"
-                (clicked)="useMyLocation()"
-              >
-                Use my location
-              </app-button>
-              @if (newCoords(); as c) {
-                <span class="fb-help">
-                  <i class="fa-solid fa-check mr-1 text-success"></i>
-                  {{ c.lat.toFixed(5) }}, {{ c.lng.toFixed(5) }}
-                </span>
-              } @else {
-                <span class="fb-help">Needed so others can find it</span>
-              }
-            </div>
+
+            <!-- The map, not just the GPS button: this spot is saved and then
+                 suggested to every volunteer who delivers nearby, so a
+                 coordinate nobody can check is the wrong thing to store. The pin
+                 starts over the listing's pickup area and a silent GPS fix moves
+                 it to where the volunteer actually is, making the common case
+                 "confirm the pin" rather than "find yourself on a map". -->
+            <app-location-picker
+              [center]="pickupPoint"
+              [location]="newCoords()"
+              [height]="220"
+              [zoom]="16"
+              [autoLocate]="true"
+              buttonLabel="Use my location"
+              placeholderText="Mark the drop-off point"
+              permissionPrompt="Turn on location to mark the drop-off point"
+              coordsLabel="Dropped at"
+              emptyHint="Drag the pin — or tap the map — to mark where you left the food."
+              (locationChange)="onPin($event)"
+              (addressResolved)="newAddress.set($event.address)"
+            />
+
+            <!-- Additive, not a second copy of the coordinates: the picker prints
+                 the numbers, this names the place they landed on. -->
+            @if (newAddress(); as a) {
+              <span class="fb-help !mt-0">
+                <i class="fa-solid fa-check mr-1 text-success"></i>{{ a }}
+              </span>
+            }
           </div>
         }
       </div>
@@ -129,15 +138,26 @@ export class DeliveryDialog {
   protected readonly data = inject<DeliveryDialogData>(DIALOG_DATA);
   protected readonly imageAccept = IMAGE_ACCEPT;
   private readonly dropOffs = inject(DropOffLocationService);
-  private readonly geo = inject(GeolocationService);
-  private readonly toast = inject(ToastService);
 
   readonly file = signal<File | null>(null);
 
   protected readonly spots = signal<DropOffHotspot[]>([]);
   protected readonly loading = signal(true);
-  protected readonly newCoords = signal<{ lat: number; lng: number } | null>(null);
-  protected readonly locating = signal(false);
+  /** Stays null until the volunteer actually places the pin — see {@link pinLocation}. */
+  protected readonly newCoords = signal<FbLatLng | null>(null);
+  /** Reverse-geocoded street address for {@link newCoords}, when one resolved. */
+  protected readonly newAddress = signal('');
+
+  /**
+   * Where the map looks before anything is picked — the listing's pickup area,
+   * which any real drop-off is near. Passed as the picker's `center`, never as
+   * its `location`: treating it as a picked point would count the *pickup* spot
+   * as the drop-off and let Confirm through with a location nobody looked at.
+   */
+  protected readonly pickupPoint: FbLatLng = {
+    lat: this.data.latitude,
+    lng: this.data.longitude,
+  };
 
   /** The custom single-select's value: a spot id, the {@link NEW_SPOT} sentinel, or null. */
   protected readonly spotControl = new FormControl<string | null>(null);
@@ -205,9 +225,19 @@ export class DeliveryDialog {
     if (value === NEW_SPOT) {
       const name = this.newName().trim();
       const coords = this.newCoords();
-      return name && coords
-        ? { latitude: coords.lat, longitude: coords.lng, name }
-        : null;
+      if (!name || !coords) {
+        return null;
+      }
+      // `address` was always on the wire contract and never populated; the map's
+      // reverse geocode fills it, so a saved spot carries something a human can
+      // read rather than a bare coordinate pair.
+      const address = this.newAddress().trim();
+      return {
+        latitude: coords.lat,
+        longitude: coords.lng,
+        name,
+        ...(address ? { address } : {}),
+      };
     }
     return value ? { locationId: value } : null;
   });
@@ -265,18 +295,14 @@ export class DeliveryDialog {
     return parts.join(' · ');
   }
 
-  protected useMyLocation(): void {
-    this.locating.set(true);
-    this.geo.current().subscribe({
-      next: (loc) => {
-        this.newCoords.set(loc);
-        this.locating.set(false);
-      },
-      error: (err: Error) => {
-        this.locating.set(false);
-        this.toast.show('fa-solid fa-triangle-exclamation', err.message || 'Could not get your location');
-      },
-    });
+  /**
+   * A point the volunteer placed — by dragging, tapping the map, or the GPS
+   * button. Clears the previous address so a stale one can't be attached to a
+   * pin that has since moved; the picker re-geocodes and refills it.
+   */
+  protected onPin(pos: FbLatLng): void {
+    this.newCoords.set(pos);
+    this.newAddress.set('');
   }
 }
 

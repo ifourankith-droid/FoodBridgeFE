@@ -558,4 +558,10 @@ body.fb-dialog-open {
     @apply underline;
     color: var(--fb-primary);
   }
+  /* After :hover deliberately — same specificity, so source order is what stops a
+     disabled link still underlining itself under the cursor. */
+  .fb-link:disabled {
+    @apply opacity-50 cursor-not-allowed no-underline;
+    color: var(--fb-muted);
+  }
 }
