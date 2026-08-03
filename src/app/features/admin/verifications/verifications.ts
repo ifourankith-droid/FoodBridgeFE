@@ -271,6 +271,7 @@ function toggle(list: readonly string[], value: string): string[] {
             text="Try widening the status or role filter above."
             actionLabel="Clear filters"
             actionIcon="fa-solid fa-filter-circle-xmark"
+            actionVariant="outline"
             (action)="clearFilters()"
           />
         </div>

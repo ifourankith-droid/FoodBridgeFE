@@ -95,8 +95,9 @@ function isCategory(id: NotificationFilter): id is NotificationCategory {
               [title]="emptyTitle()"
               [text]="emptyText()"
               [tone]="filter() === 'all' ? 'positive' : 'neutral'"
-              [actionLabel]="filter() === 'all' ? '' : 'Show all notifications'"
-              actionIcon="fa-solid fa-layer-group"
+              [actionLabel]="filter() === 'all' ? '' : 'Clear filter'"
+              actionIcon="fa-solid fa-filter-circle-xmark"
+              actionVariant="outline"
               (action)="filter.set('all')"
             />
           } @else {

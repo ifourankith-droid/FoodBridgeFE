@@ -56,11 +56,8 @@ const RADIUS_OPTIONS: readonly FbSelectOption[] = [
       [empty]="!spots().length"
       gridClass="sm:grid-cols-2"
       emptyIcon="fa-solid fa-fire"
-      [emptyText]="
-        'Nothing within ' +
-        radiusKm() +
-        ' km — widen the radius, or add a spot when you confirm your next delivery.'
-      "
+      [emptyTitle]="'No hotspots within ' + radiusKm() + ' km'"
+      emptyText="Widen the radius, or add a spot when you confirm your next delivery."
     >
       <ng-container pageActions>
         <app-button

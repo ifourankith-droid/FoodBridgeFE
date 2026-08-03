@@ -117,6 +117,7 @@ const MONTHS = [
         [loading]="loading()"
         [empty]="!rows().length"
         emptyIcon="fa-solid fa-clock-rotate-left"
+        [emptyTitle]="emptyTitle()"
         [emptyText]="emptyText()"
       >
         @for (row of rows(); track row.id) {
@@ -204,10 +205,15 @@ export class History {
     this.isVolunteer() ? 'Deliveries by month' : 'Meals received by month',
   );
 
+  /** Headline + supporting line, matching the shared EmptyState shape. */
+  protected readonly emptyTitle = computed(() =>
+    this.isVolunteer() ? 'No completed deliveries yet' : 'No confirmed receipts yet',
+  );
+
   protected readonly emptyText = computed(() =>
     this.isVolunteer()
-      ? 'No completed deliveries yet — claim a nearby listing and confirm the drop-off.'
-      : 'No confirmed receipts yet — accept an incoming delivery to start your history.',
+      ? 'Claim a nearby listing and confirm the drop-off to start your history.'
+      : 'Accept an incoming delivery and confirm it to start your history.',
   );
 
   // ---- Data ----

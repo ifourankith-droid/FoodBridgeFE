@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { ListingGrid } from '@shared/ui/listing-grid/listing-grid';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 
@@ -132,6 +132,10 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
               [emptyText]="emptyText()"
               [skeletonCount]="skeletonCount()"
               [gridClass]="gridClass()"
+              [emptyActionLabel]="emptyActionLabel()"
+              [emptyActionIcon]="emptyActionIcon()"
+              [emptyActionVariant]="emptyActionVariant()"
+              (emptyAction)="emptyAction.emit()"
             >
               <ng-content />
             </app-listing-grid>
@@ -370,6 +374,17 @@ export class ListingLayout {
   readonly emptyText = input('Nothing here yet');
   readonly skeletonCount = input(6);
   readonly gridClass = input('lg:grid-cols-3');
+
+  /**
+   * Button under the empty message. Pages that filter pass "Clear filters" here —
+   * a list filtered to nothing hides the very rows that would explain why, so the
+   * way back belongs next to the message rather than only in the filter row.
+   * Leave `emptyActionLabel` blank and no button renders.
+   */
+  readonly emptyActionLabel = input('');
+  readonly emptyActionIcon = input('');
+  readonly emptyActionVariant = input<'solid' | 'outline'>('solid');
+  readonly emptyAction = output<void>();
 }
 
 let nextLayoutId = 0;

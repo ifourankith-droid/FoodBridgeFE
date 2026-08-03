@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { EmptyState } from '@shared/ui/empty-state/empty-state';
 
 /**
@@ -27,6 +27,16 @@ export class ListingGrid {
   readonly skeletonCount = input(6);
   /** Responsive column utilities appended to the base `grid gap-4`. */
   readonly gridClass = input('lg:grid-cols-3');
+
+  /**
+   * Optional button under the empty message — typically "Clear filters", so a
+   * filtered-to-nothing list offers its own way back instead of making the user
+   * hunt for the control that emptied it.
+   */
+  readonly emptyActionLabel = input('');
+  readonly emptyActionIcon = input('');
+  readonly emptyActionVariant = input<'solid' | 'outline'>('solid');
+  readonly emptyAction = output<void>();
 
   protected readonly gridClasses = computed(() => `grid gap-4 ${this.gridClass()}`);
   protected readonly skeletons = computed(() => Array.from({ length: this.skeletonCount() }));

@@ -1,24 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { FbButton } from "../button/button";
 
 /**
  * The app's single "no data" surface. Every list, table, grid and dashboard
  * panel routes its empty case through here so they all read the same way.
  *
- * The generic message is `text`, and it is the only input most callers need:
- *
- *   <app-empty-state text="No listings match this filter" />
- *
- * `text` is rendered as the HEADLINE when no `title` is supplied, so a
- * one-line caller still gets a prominent, legible message rather than small
- * grey print. Pass `title` as well when you want a short headline plus a
- * longer explanation:
+ * **House style: always pass `icon` + `title` + `text`.** The title is a short
+ * statement of what is missing; the text says what will put something there.
+ * Every empty in the app is written that way, so they all read alike:
  *
  *   <app-empty-state
  *     icon="fa-solid fa-award"
  *     [title]="'No certificates yet'"
- *     text="Complete a delivery and your first certificate lands here."
+ *     text="Complete a donation and your CSR-ready certificate lands here."
  *     actionLabel="Browse listings"
  *     (action)="goToListings()" />
+ *
+ * `text` alone still works — it is promoted to the headline so a one-line caller
+ * gets a legible message rather than small grey print — but it produces a
+ * visibly different, headline-only block, which is why no caller does it:
+ *
+ *   <app-empty-state text="No listings match this filter" />   <!-- avoid -->
  *
  * Variants:
  *   size="sm"          compact, for table cells and tight panels
@@ -45,12 +47,19 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
       }
 
       @if (actionLabel()) {
-        <button type="button" class="cta" (click)="action.emit()">
-          @if (actionIcon()) {
-            <i [class]="actionIcon()" aria-hidden="true"></i>
-          }
+        <!-- (clicked), not (click): the latter catches the native event bubbling
+             out of FbButton's inner button, which works by accident and skips the
+             guard in its own onClick. clicked is the declared output. -->
+        <app-button
+          class="mt-5"
+          type="button"
+          size="sm"
+          [variant]="actionVariant()"
+          [icon]="actionIcon()"
+          (clicked)="action.emit()"
+        >
           {{ actionLabel() }}
-        </button>
+        </app-button>
       }
     </div>
   `,
@@ -139,48 +148,15 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
       margin-top: 4px;
     }
 
-    /* ---- Optional call to action ---- */
-    .cta {
-      margin-top: 18px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 13.5px;
-      cursor: pointer;
-      color: #fff;
-      border: 1px solid transparent;
-      background: var(--fb-primary);
-      box-shadow: 0 6px 16px var(--fb-glow-primary-deep);
-      transition:
-        transform 0.15s ease,
-        filter 0.15s ease;
-    }
-    .cta:hover {
-      transform: translateY(-1px);
-      filter: brightness(1.06);
-    }
-    .cta:focus-visible {
-      outline: none;
-      box-shadow: var(--fb-ring);
-    }
-    .is-sm .cta {
-      margin-top: 12px;
-      padding: 8px 15px;
-      font-size: 12.5px;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .cta {
-        transition: none;
-      }
-      .cta:hover {
-        transform: none;
-      }
+    /* ---- Optional call to action ----
+       The button itself is <app-button>, so its styling (both variants, the
+       hover/focus treatment and the reduced-motion handling) lives there. Only
+       the spacing around it belongs to this component. */
+    .is-sm app-button {
+      margin-top: 0.5rem;
     }
   `,
+  imports: [FbButton],
 })
 export class EmptyState {
   readonly icon = input('fa-solid fa-inbox');
@@ -201,6 +177,8 @@ export class EmptyState {
 
   readonly actionLabel = input('');
   readonly actionIcon = input('');
+  /** `outline` for an undo-style escape hatch (clear filters, show everything). */
+  readonly actionVariant = input<'solid' | 'outline'>('solid');
   readonly action = output<void>();
 
   protected readonly headline = computed(() => this.title() || this.text());

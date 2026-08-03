@@ -43,8 +43,12 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
               </button>
             </div>
           } @empty {
-            <div class="md:col-span-2 lg:col-span-3">
-              <app-empty-state icon="fa-solid fa-award" text="No certificates yet — complete a delivery to earn one" />
+            <div class="card-fb md:col-span-2 lg:col-span-3">
+              <app-empty-state
+                icon="fa-solid fa-award"
+                [title]="'No certificates yet'"
+                text="Complete a donation and your CSR-ready certificate lands here."
+              />
             </div>
           }
         </div>

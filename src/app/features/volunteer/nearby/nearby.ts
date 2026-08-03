@@ -84,7 +84,16 @@ const COLOR_DROP = '#1e9e5c';
       [empty]="!rows().length"
       gridClass="md:grid-cols-2"
       emptyIcon="fa-solid fa-map-location-dot"
-      emptyText="No open listings match this filter — widen it or check back soon"
+      [emptyTitle]="hasFilters() ? 'No listings match these filters' : 'No open listings nearby'"
+      [emptyText]="
+        hasFilters()
+          ? 'Clear the diet or meal filter to see everything open near you.'
+          : 'Check back soon — donations are posted throughout the day.'
+      "
+      [emptyActionLabel]="hasFilters() ? 'Clear filters' : ''"
+      emptyActionIcon="fa-solid fa-filter-circle-xmark"
+      emptyActionVariant="outline"
+      (emptyAction)="clearFilters()"
     >
       <ng-container pageActions>
         <app-button
@@ -380,6 +389,17 @@ export class Nearby {
   // multi-select can't be pushed server-side.
   protected readonly dietSel = signal<string[]>([]);
   protected readonly mealSel = signal<string[]>([]);
+
+  /** Whether anything is narrowing the feed — decides which empty message shows. */
+  protected readonly hasFilters = computed(
+    () => !!(this.dietSel().length || this.mealSel().length),
+  );
+
+  /** Drop every filter — the empty state's way back to the full feed. */
+  protected clearFilters(): void {
+    this.dietSel.set([]);
+    this.mealSel.set([]);
+  }
 
   /** Volunteer is Offline → we don't hit the nearby API; the page prompts them to go Available. */
   protected readonly offline = computed(() => !this.availability.isActive());

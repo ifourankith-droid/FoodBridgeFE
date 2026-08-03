@@ -49,7 +49,16 @@ const LOAD_LIMIT = 500;
       [empty]="!filtered().length"
       emptyIcon="fa-solid fa-box-open"
       gridClass="lg:grid-cols-2"
-      [emptyText]="hasFilters() ? 'No donations match these filters' : 'No donations yet'"
+      [emptyTitle]="hasFilters() ? 'No donations match these filters' : 'No donations yet'"
+      [emptyText]="
+        hasFilters()
+          ? 'Clear or widen the filters to see your other donations.'
+          : 'Post surplus food and nearby volunteers are notified straight away.'
+      "
+      [emptyActionLabel]="hasFilters() ? 'Clear filters' : ''"
+      emptyActionIcon="fa-solid fa-filter-circle-xmark"
+      emptyActionVariant="outline"
+      (emptyAction)="clearFilters()"
     >
       <div pageActions>
         <app-button icon="fa-solid fa-plus" (clicked)="create()">New Donation</app-button>
@@ -294,6 +303,13 @@ export class MyListings {
     });
     return `conic-gradient(${segments.join(', ')})`;
   });
+
+  /** Drop every filter at once — the empty state's way back to the full list. */
+  protected clearFilters(): void {
+    this.statusSel.set([]);
+    this.dietSel.set([]);
+    this.mealSel.set([]);
+  }
 
   /** Toggle a status in the filter (from a breakdown row). */
   protected toggleStatus(id: string): void {

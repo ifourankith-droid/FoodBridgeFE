@@ -101,7 +101,12 @@ const DEFAULT_ORIGIN: FbLatLng = {
       [empty]="!rows().length"
       gridClass="md:grid-cols-2"
       emptyIcon="fa-solid fa-truck-fast"
+      [emptyTitle]="emptyTitle()"
       [emptyText]="emptyText()"
+      [emptyActionLabel]="counts().all ? 'Clear filters' : ''"
+      emptyActionIcon="fa-solid fa-filter-circle-xmark"
+      emptyActionVariant="outline"
+      (emptyAction)="clearFilters()"
     >
       <ng-container pageActions>
         <app-button
@@ -666,10 +671,30 @@ export class Deliveries {
       );
   });
 
+  /**
+   * Drop every filter. Clears the status selection outright rather than restoring
+   * its ['claimed','pickedup'] default — the message offers to show "your other
+   * deliveries", and those are the ones the default hides.
+   */
+  protected clearFilters(): void {
+    this.statusSel.set([]);
+    this.dietSel.set([]);
+    this.mealSel.set([]);
+  }
+
+  /**
+   * Headline + supporting line, split so this empty reads like every other one in
+   * the app (see EmptyState): a short statement of what is missing, then what puts
+   * something there.
+   */
+  protected readonly emptyTitle = computed(() =>
+    this.counts().all ? 'Nothing matches these filters' : 'No deliveries yet',
+  );
+
   protected readonly emptyText = computed(() =>
     this.counts().all
-      ? 'Nothing matches these filters — clear them to see your other deliveries'
-      : "You haven't claimed anything yet — claim a nearby listing to get started",
+      ? 'Clear them to see your other deliveries.'
+      : 'Claim a nearby listing and it appears here with its next step.',
   );
 
   protected readonly locationLabel = computed(() => {

@@ -122,7 +122,12 @@ import {
             } @empty {
               <app-empty-state
                 icon="fa-regular fa-bell"
+                [title]="emptyTitle()"
                 [text]="emptyText()"
+                [actionLabel]="filter() === 'all' ? '' : 'Clear filter'"
+                actionIcon="fa-solid fa-filter-circle-xmark"
+                actionVariant="outline"
+                (action)="filter.set('all')"
                 size="sm"
                 tone="positive"
               />
@@ -329,8 +334,18 @@ export class NotificationBell {
     return count ? `${count} unread` : "You're all caught up";
   });
 
-  protected readonly emptyText = computed(() =>
+  /**
+   * Headline + supporting line, so the dropdown's empty reads the same as the
+   * inbox page's. Shorter copy than the page: this panel is 380px wide.
+   */
+  protected readonly emptyTitle = computed(() =>
     this.filter() === 'all' ? 'No notifications yet' : 'Nothing matches this filter',
+  );
+
+  protected readonly emptyText = computed(() =>
+    this.filter() === 'all'
+      ? 'Pickups, confirmations and rewards land here.'
+      : 'Try a different filter above.',
   );
 
   /** Open the row's related page, closing the dropdown so it doesn't hang over it. */

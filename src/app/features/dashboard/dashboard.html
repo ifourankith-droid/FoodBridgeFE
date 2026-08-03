@@ -44,7 +44,11 @@
             </div>
           } @else {
             <div class="card-fb p-3 mb-6">
-              <app-empty-state icon="fa-solid fa-inbox" text="No recent activity yet" />
+              <app-empty-state
+                icon="fa-solid fa-inbox"
+                [title]="'No recent activity yet'"
+                text="Your donations, pickups and confirmations appear here as they happen."
+              />
             </div>
           }
 
@@ -154,7 +158,11 @@
               </app-listing-card>
             } @empty {
               <div class="md:col-span-2 lg:col-span-3">
-                <app-empty-state icon="fa-solid fa-map" text="No open listings right now" />
+                <app-empty-state
+                  icon="fa-solid fa-map"
+                  [title]="'No open listings right now'"
+                  text="New donations show up here as soon as they are posted nearby."
+                />
               </div>
             }
           </div>
@@ -231,7 +239,11 @@
                   <span class="text-sm font-semibold w-8 text-right">{{ s.count }}</span>
                 </div>
               } @empty {
-                <app-empty-state icon="fa-solid fa-list" text="No listings yet" />
+                <app-empty-state
+                  icon="fa-solid fa-list"
+                  [title]="'No listings yet'"
+                  text="Listings appear here as soon as donors start posting."
+                />
               }
             </div>
 
@@ -245,7 +257,11 @@
                   <span class="badge-fb bg-primary-soft text-primary-deep">{{ s.count }}</span>
                 </div>
               } @empty {
-                <app-empty-state icon="fa-solid fa-users" text="No accounts yet" />
+                <app-empty-state
+                  icon="fa-solid fa-users"
+                  [title]="'No accounts yet'"
+                  text="Registered donors, volunteers and NGOs are counted here."
+                />
               }
             </div>
           </div>

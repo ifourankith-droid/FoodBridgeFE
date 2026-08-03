@@ -10,7 +10,20 @@
     }
   </div>
 } @else if (empty()) {
-  <app-empty-state [icon]="emptyIcon()" [title]="emptyTitle()" [text]="emptyText()" />
+  <!-- On a card surface, matching the notification inbox and the track/verifications
+       pages. Bare on the page background it read as a gap where the list failed to
+       render rather than a deliberate empty. -->
+  <div class="card-fb">
+    <app-empty-state
+      [icon]="emptyIcon()"
+      [title]="emptyTitle()"
+      [text]="emptyText()"
+      [actionLabel]="emptyActionLabel()"
+      [actionIcon]="emptyActionIcon()"
+      [actionVariant]="emptyActionVariant()"
+      (action)="emptyAction.emit()"
+    />
+  </div>
 } @else {
   <div [class]="gridClasses()">
     <ng-content />

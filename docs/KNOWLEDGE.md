@@ -6,6 +6,70 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## "Clear filters" on every filtered-to-nothing empty state
+
+**Done by me on 2026-08-03**
+
+A list filtered down to nothing hides the very rows that would explain why, and the
+control that emptied it is off in the filter row (or, on the listing pages, inside a
+dropdown). The way back now sits under the empty message.
+
+- **`EmptyState`** — new `actionVariant: 'solid' | 'outline'` (default `solid`, so
+  existing CTAs are untouched). Outline for this one deliberately: "Clear filters"
+  *undoes* something the user did, and a filled primary button would give it the same
+  weight as the page's real call to action ("New Donation" is on the same screen).
+- **`ListingGrid` / `ListingLayout`** — `emptyActionLabel` / `emptyActionIcon` /
+  `emptyActionVariant` inputs and an `emptyAction` output, forwarded down. Without
+  these the listing pages had no way to reach the empty state's CTA at all.
+- Wired on **My Donations, My Deliveries, Nearby Listings, admin All Listings**, each
+  with a `clearFilters()` that resets its own filter signals. **Nearby** gained a
+  `hasFilters` computed so its empty can distinguish "nothing nearby" from "nothing
+  matches your filters" — previously one message covered both.
+- Existing CTAs on **admin Verifications** and the **notification inbox/dropdown**
+  switched to the outline variant, and the inbox's "Show all notifications" is now
+  "Clear filter" so the wording matches everywhere.
+
+One judgement call worth recording: **My Deliveries clears its status filter to `[]`,
+not back to its `['claimed','pickedup']` default.** The message offers to show "your
+other deliveries", and those are exactly the ones the default hides — restoring it
+would leave the user staring at the same empty screen.
+
+Verified end to end in the browser on My Donations: 47 cards → filters applied → 0
+cards with the empty state and an outlined "Clear filters" (white fill, teal text, not
+a filled primary) → **clicking the real DOM button** → 47 cards back and the active
+filter chips 4 → 0.
+
+---
+
+## Every empty state now reads like the notification inbox
+
+**Done by me on 2026-08-03**
+
+`EmptyState` was already shared, so the inconsistency was in **how it was called**,
+not in the component. Two things differed:
+
+1. **Headline only vs headline + supporting line.** `text` is promoted to the
+   headline when no `title` is given, so `text="No certificates yet — complete a
+   delivery to earn one"` rendered one long bold line, while Notifications rendered
+   a short bold headline over a muted explanation. 11 call sites were in the first
+   group; all now pass `icon` + `title` + `text`, with the long single strings split
+   into a headline ("No deliveries yet") and a reason ("Claim a nearby listing and it
+   appears here with its next step.").
+2. **Card vs bare background.** Notifications, Track and admin Verifications wrapped
+   theirs in `card-fb`; the listing pages and Certificates did not, so those empties
+   floated on the page background and read as a gap where the list failed to render.
+   `listing-grid.html` now wraps its empty branch in `card-fb` — which fixes every
+   `ListingLayout` page at once — and Certificates matches.
+
+Also `EmptyState`'s own doc comment, which said `text` "is the only input most callers
+need". That was the advice producing group 1; it now states the house style (always
+`icon` + `title` + `text`) and marks the one-line form as the thing to avoid.
+
+Verified by stubbing the list endpoints to an empty envelope and rendering three
+pages: headline and supporting text present on each, on a card, laid out identically.
+
+---
+
 ## `title="…"` on a component renders a native browser tooltip
 
 **Done by me on 2026-08-03**

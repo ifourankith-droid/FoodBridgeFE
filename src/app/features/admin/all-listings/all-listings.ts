@@ -88,7 +88,16 @@ function toCard(l: AdminListingSummary): ListingCardData {
       [empty]="!filtered().length"
       emptyIcon="fa-solid fa-inbox"
       gridClass="lg:grid-cols-2"
-      [emptyText]="statusSel().length ? 'No listings match this filter' : 'No listings yet'"
+      [emptyTitle]="statusSel().length ? 'No listings match this filter' : 'No listings yet'"
+      [emptyText]="
+        statusSel().length
+          ? 'Clear the status filter to see every listing on the platform.'
+          : 'Listings appear here as soon as donors start posting.'
+      "
+      [emptyActionLabel]="statusSel().length ? 'Clear filters' : ''"
+      emptyActionIcon="fa-solid fa-filter-circle-xmark"
+      emptyActionVariant="outline"
+      (emptyAction)="statusSel.set([])"
     >
       <div pageActions>
         <app-button variant="outline" icon="fa-solid fa-rotate" [loading]="loading()" (clicked)="reload()">
