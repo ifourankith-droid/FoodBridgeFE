@@ -20,7 +20,7 @@ export const environment = {
   useMockAuth: false,
   // Keep in step with the backend's Features:RecipientRoleEnabled.
   recipientRoleEnabled: false,
-  googleMapsApiKey: '',
+  googleMapsApiKey: 'AIzaSyAXVVochlS3spceNiarzKJK6Jjgm_n8F7c',
   mapDefaultCenter: { lat: 23.0225, lng: 72.5714 },
   mapDefaultZoom: 13,
 };
