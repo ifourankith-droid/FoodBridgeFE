@@ -20,7 +20,19 @@ export const environment = {
   useMockAuth: false,
   // Keep in step with the backend's Features:RecipientRoleEnabled.
   recipientRoleEnabled: false,
-  googleMapsApiKey: 'AIzaSyAXVVochlS3spceNiarzKJK6Jjgm_n8F7c',
+  /**
+   * Google Maps JavaScript API key — **left empty on purpose; do not commit a key here.**
+   *
+   * `scripts/set-maps-key.mjs` writes the real value into this line from the
+   * `GOOGLE_MAPS_API_KEY` secret just before `ng build` runs in CI. It has to happen at build time
+   * because this is a compile-time constant baked into the bundle: a Static Web Apps application
+   * setting would never reach the browser, since there is no server in the request path for a
+   * static SPA.
+   *
+   * Empty is a safe default — `GoogleMapsLoaderService` reports `no-key` and `FbMap` renders its
+   * placeholder card instead of a broken map.
+   */
+  googleMapsApiKey: '',
   mapDefaultCenter: { lat: 23.0225, lng: 72.5714 },
   mapDefaultZoom: 13,
 };

@@ -36,6 +36,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The Maps key is a compile-time constant in the bundle, so it must be injected before the
+      # build — a Static Web Apps application setting is server-side only and never reaches the
+      # browser. Skipped silently when the secret is absent; the map then falls back to its
+      # placeholder card rather than failing the deploy.
+      - name: Inject the Google Maps key
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: node scripts/set-maps-key.mjs
+
       # Built here rather than letting Oryx do it: this repo pins its own Node version and
       # Angular output path, and a local failure is far easier to read than one inside the
       # deployment container. `skip_app_build` below tells the action to just upload.
