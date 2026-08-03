@@ -15,6 +15,20 @@ export interface ApiUser {
   city: string | null;
   accountStatus: string;
   recipientType: string | null;
+  avatarUrl?: string | null;
+  /** `AddressResponse` — the complete address, or null when the account has none. */
+  address?: ApiUserAddress | null;
+}
+
+/** `AddressResponse`. Every part nullable; `label` is set only for a donor's saved address. */
+export interface ApiUserAddress {
+  label: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 /** POST /auth/verify-otp — new mobile → session token; existing → auth JWT + user. */
@@ -41,6 +55,9 @@ export interface RegisterApiRequest {
   longitude: number | null;
   recipientType: string | null;
   capacityMeals: number | null;
+  /** Optional postal parts. Reverse-geocoding fills both from the picked pin. */
+  state: string | null;
+  pincode: string | null;
 }
 
 /**

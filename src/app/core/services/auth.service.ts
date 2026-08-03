@@ -193,6 +193,9 @@ export class AuthService {
       longitude: draft.longitude,
       recipientType: isRecipient ? draft.recipientType : null,
       capacityMeals: isRecipient ? this.parseCapacity(draft.capacity) : null,
+      // The wizard has collected these since it was built; they used to stop here.
+      state: draft.state.trim() || null,
+      pincode: draft.pincode.trim() || null,
     };
 
     return this.authApi.register(request).pipe(
@@ -299,6 +302,9 @@ export class AuthService {
     };
     if (api.recipientType) {
       user.recipientType = api.recipientType as RecipientType;
+    }
+    if (api.address) {
+      user.address = api.address;
     }
     return user;
   }

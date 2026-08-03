@@ -12,9 +12,28 @@ export interface PickupAddress {
   label: string;
   /** Full postal address text used as the listing's pickup address. */
   address: string;
+  /** Postal parts, all optional — display-only; distance always comes from the coordinates. */
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
   latitude: number;
   longitude: number;
   isDefault?: boolean;
+}
+
+/**
+ * Everything needed to save an address, as one object rather than a positional list — the postal
+ * parts are all optional and a run of same-typed arguments is exactly how `city` and `pincode` got
+ * silently dropped here before.
+ */
+export interface PickupAddressDraft {
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
 }
 
 const KEY = 'foodbridge.pickupAddresses';
@@ -103,35 +122,47 @@ export class PickupAddressService {
     return of(undefined);
   }
 
-  create(label: string, address: string, latitude: number, longitude: number, makeDefault = false): Observable<PickupAddress> {
-    const l = label.trim();
-    const a = address.trim();
+  create(draft: PickupAddressDraft, makeDefault = false): Observable<PickupAddress> {
+    // The very first address becomes the default: a donor with addresses but no selection can't
+    // post a donation at all.
     const isDefault = makeDefault || !this.addresses().length;
+    const clean = this.clean(draft);
     if (this.serverBacked()) {
-      const body: DonorAddressBody = { label: l, address: a, latitude, longitude, isDefault };
-      return this.donorApi.create(body).pipe(
+      return this.donorApi.create({ ...clean, isDefault }).pipe(
         tap(() => this.load()),
         catchError(() => {
           this.serverBacked.set(false);
           this.loadLocal();
-          return of(this.localAdd(l, a, latitude, longitude, true));
+          return of(this.localAdd(clean, true));
         }),
       );
     }
-    return of(this.localAdd(l, a, latitude, longitude, isDefault));
+    return of(this.localAdd(clean, isDefault));
   }
 
-  update(id: string, label: string, address: string, latitude: number, longitude: number, isDefault: boolean): Observable<PickupAddress> {
-    const l = label.trim();
-    const a = address.trim();
+  update(id: string, draft: PickupAddressDraft, isDefault: boolean): Observable<PickupAddress> {
+    const clean = this.clean(draft);
     if (this.serverBacked()) {
-      return this.donorApi.update(id, { label: l, address: a, latitude, longitude, isDefault }).pipe(tap(() => this.load()));
+      return this.donorApi.update(id, { ...clean, isDefault }).pipe(tap(() => this.load()));
     }
-    const addr: PickupAddress = { id, label: l, address: a, latitude, longitude, isDefault };
+    const addr: PickupAddress = { id, ...clean, isDefault };
     this.addresses.update((list) =>
       list.map((x) => (x.id === id ? addr : isDefault ? { ...x, isDefault: false } : x)),
     );
     return of(addr);
+  }
+
+  /** Trim every text part and collapse blanks to null, matching what the backend stores. */
+  private clean(draft: PickupAddressDraft): PickupAddressDraft {
+    return {
+      label: draft.label.trim(),
+      address: draft.address.trim(),
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+      city: draft.city?.trim() || null,
+      state: draft.state?.trim() || null,
+      pincode: draft.pincode?.trim() || null,
+    };
   }
 
   remove(id: string): Observable<void> {
@@ -160,7 +191,19 @@ export class PickupAddressService {
     this.users.getProfile(id).subscribe({
       next: (p) => {
         if (p.address && p.latitude != null && p.longitude != null) {
-          this.localAdd('Primary', p.address, p.latitude, p.longitude, true, 'profile');
+          this.localAdd(
+            {
+              label: 'Primary',
+              address: p.address,
+              latitude: p.latitude,
+              longitude: p.longitude,
+              city: p.city,
+              state: p.state,
+              pincode: p.pincode,
+            },
+            true,
+            'profile',
+          );
         }
       },
       error: () => undefined,
@@ -168,14 +211,11 @@ export class PickupAddressService {
   }
 
   private localAdd(
-    label: string,
-    address: string,
-    latitude: number,
-    longitude: number,
+    draft: PickupAddressDraft,
     makeDefault: boolean,
     id = `addr-${Date.now()}`,
   ): PickupAddress {
-    const addr: PickupAddress = { id, label, address, latitude, longitude, isDefault: makeDefault };
+    const addr: PickupAddress = { id, ...draft, isDefault: makeDefault };
     this.addresses.update((list) => {
       const next = makeDefault ? list.map((x) => ({ ...x, isDefault: false })) : list;
       return [...next, addr];
@@ -186,7 +226,20 @@ export class PickupAddressService {
     return addr;
   }
 
+  /**
+   * Re-send an existing address unchanged apart from `isDefault` — the PUT is a full replace, so
+   * every field has to be carried across or setting the default would wipe the postal parts.
+   */
   private toBody(a: PickupAddress, isDefault: boolean): DonorAddressBody {
-    return { label: a.label, address: a.address, latitude: a.latitude, longitude: a.longitude, isDefault };
+    return {
+      label: a.label,
+      address: a.address,
+      latitude: a.latitude,
+      longitude: a.longitude,
+      city: a.city ?? null,
+      state: a.state ?? null,
+      pincode: a.pincode ?? null,
+      isDefault,
+    };
   }
 }
