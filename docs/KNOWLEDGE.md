@@ -6,6 +6,41 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## Toast: a successful cancel reported "Something went wrong"
+
+**Done by me on 2026-08-03**
+
+### Problem
+Cancelling a listing returned 200 and cancelled it, then popped a red toast
+titled **"Something went wrong"**. Nothing failed — the toast was misreporting.
+
+`ToastService.show(icon, message)` infers the toast *type* from a substring of
+the Font Awesome class, and `'fa-ban'` matched `includes('ban')` → `error`. Since
+`show()` passes no title, it fell back to the error type's default title. So
+`show('fa-solid fa-ban', 'Listing cancelled')` rendered as
+**Something went wrong / Listing cancelled**, in red.
+
+The inference was the whole bug: `fa-ban` is this app's **cancelled-status** glyph
+(`STATUS_ICONS` in `listing.model`), so it describes the *subject* of the message,
+not its outcome. No amount of guessing can tell those apart.
+
+### Fix
+- **`src/app/core/services/toast.service.ts`**
+  - `show()` takes an optional third arg, `type: ToastType`, which wins over the
+    guess. The ~100 existing two-arg callers are untouched.
+  - Dropped `'ban'` from the error heuristic (`'xmark'` still means error), so an
+    icon-only caller can't hit this again.
+- **`src/app/features/donor/my-listings/my-listings.ts`** — the cancel
+  confirmation now passes `'success'` outright.
+- **`toast.service.spec.ts`** (new) pins it: `fa-ban` is never an error, an
+  explicit type overrides the icon, and the other inferences still hold.
+
+`ListingStore` (`core/services/listing-store.service.ts`) has the same
+`show('fa-solid fa-ban', …)` call, but it's the pre-backend mock store and nothing
+injects it — the heuristic change covers it anyway if it's ever revived.
+
+---
+
 ## ListingLayout: dead space under the summary card when the aside is tall
 
 **Done by me on 2026-08-03**
