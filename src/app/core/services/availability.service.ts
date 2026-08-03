@@ -162,9 +162,13 @@ export class AvailabilityService {
       .getProfile(id)
       .pipe(
         switchMap((p) => {
+          // Only the coordinates change here — every other field is echoed back verbatim because
+          // the PUT is a full replace, so anything omitted would be erased.
           const body: UpdateProfileBody = {
             name: p.name,
             city: p.city,
+            state: p.state,
+            pincode: p.pincode,
             address: p.address,
             latitude: loc.lat,
             longitude: loc.lng,

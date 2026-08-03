@@ -7,10 +7,15 @@ import { AuthService } from '@core/services/auth.service';
 import { AvailabilityService } from '@core/services/availability.service';
 import { DialogService } from '@core/services/dialog.service';
 import type { GeoAddress } from '@core/services/geocoding.service';
-import { PickupAddress, PickupAddressService } from '@core/services/pickup-address.service';
+import {
+  PickupAddress,
+  PickupAddressDraft,
+  PickupAddressService,
+} from '@core/services/pickup-address.service';
 import { ToastService } from '@core/services/toast.service';
 import { UserService } from '@core/services/user.service';
 import { UpdateProfileBody, UserProfile } from '@core/models/user.model';
+import { formatAddress } from '@shared/util/address';
 import { FbAutofocus } from '@shared/directives/autofocus.directive';
 import { AvailabilityToggle } from '@shared/ui/availability-toggle/availability-toggle';
 import { FbButton } from '@shared/ui/button/button';
@@ -22,8 +27,8 @@ import { RoleBadge } from '@shared/ui/role-badge/role-badge';
 import { Avatar } from '@shared/ui/avatar/avatar';
 import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
 
-/** Address-form controls that carry validation, in display order. */
-const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
+/** Address-form controls that carry validation, in display order. `city` has none. */
+const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
 
 @Component({
   selector: 'app-profile',
@@ -90,8 +95,18 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
           <div class="grid sm:grid-cols-2 gap-3">
             <app-input class="sm:col-span-2" label="Mobile" prefix="+91" prefixIcon="fa-solid fa-phone" formControlName="mobile" />
             <app-input class="sm:col-span-2" label="Full Name" formControlName="name" />
-            <app-input class="sm:col-span-2" label="City" formControlName="city" />
             <app-input class="sm:col-span-2" label="Address" formControlName="address" />
+            <app-input label="City" formControlName="city" />
+            <app-input label="State" formControlName="state" [maxlength]="100" />
+            <app-input
+              class="sm:col-span-2"
+              label="Pincode"
+              type="tel"
+              inputmode="numeric"
+              [maxlength]="6"
+              formControlName="pincode"
+              [error]="pincodeError()"
+            />
             @if (isRecipient()) {
               <app-input label="Recipient Type" formControlName="recipientType" />
               <app-input
@@ -141,7 +156,7 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
                   <i class="fa-solid mr-2 shrink-0" [class]="isDefault(a) ? 'fa-circle-check text-primary' : 'fa-location-dot text-muted'"></i>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold truncate">{{ a.label }}</div>
-                    <div class="text-xs text-muted truncate">{{ a.address }}</div>
+                    <div class="text-xs text-muted truncate">{{ oneLine(a) }}</div>
                   </div>
                   <button
                     type="button"
@@ -199,7 +214,8 @@ const ADDR_FIELDS = ['label', 'address', 'pincode'] as const;
                   <app-input class="sm:col-span-2" label="Label" formControlName="label" placeholder="e.g. Home, Main Branch" [required]="true" [maxlength]="100" hint="A short name to recognise this location." [error]="addrErr('label')" />
                   <app-input class="sm:col-span-2" label="Address" formControlName="address" placeholder="e.g. C.G. Road, Navrangpura" [required]="true" [maxlength]="500" hint="Drop a pin or use GPS to auto-fill." [error]="addrErr('address')" />
                   <app-input label="City" formControlName="city" placeholder="City" />
-                  <app-input label="Pincode" type="tel" [maxlength]="6" inputmode="numeric" formControlName="pincode" placeholder="Pincode" [error]="addrErr('pincode')" />
+                  <app-input label="State" formControlName="state" placeholder="State" [maxlength]="100" />
+                  <app-input class="sm:col-span-2" label="Pincode" type="tel" [maxlength]="6" inputmode="numeric" formControlName="pincode" placeholder="Pincode" [error]="addrErr('pincode')" />
                 </form>
                 <div class="mt-4 flex gap-2">
                   <app-button icon="fa-solid fa-check" [disabled]="savingAddr()" (clicked)="saveAddress()">
@@ -465,17 +481,13 @@ export class Profile {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
 
-  /** Street + city joined into one line for the identity header. */
-  protected readonly fullAddress = computed(() => {
-    const u = this.profile();
-    if (!u) {
-      return '';
-    }
-    return [u.address, u.city]
-      .map((part) => part?.trim())
-      .filter(Boolean)
-      .join(', ');
-  });
+  /** The complete address on one line for the identity header. */
+  protected readonly fullAddress = computed(() => formatAddress(this.profile()));
+
+  /** Same one-line form for a saved pickup address row. */
+  protected oneLine(a: PickupAddress): string {
+    return formatAddress(a);
+  }
 
   // ---- Pickup address management (donors) ----
   protected readonly isDonor = computed(() => this.profile()?.role?.toLowerCase() === 'donor');
@@ -505,6 +517,8 @@ export class Profile {
     label: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(100)] }),
     address: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(500)] }),
     city: new FormControl('', { nonNullable: true }),
+    state: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(100)] }),
+    // `\d{0,6}` not `\d{6}`: an empty pincode is valid (the field is optional), a partial one isn't.
     pincode: new FormControl('', { nonNullable: true, validators: [Validators.pattern(/^\d{0,6}$/)] }),
   });
 
@@ -540,18 +554,36 @@ export class Profile {
   protected readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true }),
     city: new FormControl('', { nonNullable: true }),
+    state: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(100)] }),
+    // Optional, so blank is valid — `\d{0,6}` rejects a partial entry without demanding one.
+    pincode: new FormControl('', { nonNullable: true, validators: [Validators.pattern(/^\d{0,6}$/)] }),
     address: new FormControl('', { nonNullable: true }),
     capacity: new FormControl('', { nonNullable: true }),
     mobile: new FormControl({ value: '', disabled: true }, { nonNullable: true }),
     recipientType: new FormControl({ value: '', disabled: true }, { nonNullable: true }),
   });
 
+  /**
+   * The one profile field that can be malformed rather than merely empty. A signal rather than a
+   * `computed`, because reactive-form validity isn't a signal — a computed over it would evaluate
+   * once and never update.
+   */
+  protected readonly pincodeError = signal('');
+
   constructor() {
+    const destroyRef = inject(DestroyRef);
+
     // Re-validate the address fields on every change, once a save has been attempted.
-    this.addrForm.valueChanges.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe(() => {
+    this.addrForm.valueChanges.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => {
       if (this.addrValidated) {
         this.refreshAddrErrors();
       }
+    });
+
+    this.form.controls.pincode.valueChanges.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => {
+      this.pincodeError.set(
+        this.form.controls.pincode.invalid ? 'Pincode must be 6 digits.' : '',
+      );
     });
 
     const id = this.auth.currentUser()?.id;
@@ -603,10 +635,19 @@ export class Profile {
     if (!id) {
       return;
     }
+    this.form.controls.pincode.markAsTouched();
+    if (this.form.controls.pincode.invalid) {
+      this.pincodeError.set('Pincode must be 6 digits.');
+      this.toast.show('fa-solid fa-triangle-exclamation', 'Pincode must be 6 digits.');
+      return;
+    }
+
     const v = this.form.getRawValue();
     const body: UpdateProfileBody = {
       name: v.name.trim(),
       city: v.city.trim() || null,
+      state: v.state.trim() || null,
+      pincode: v.pincode.trim() || null,
       address: v.address.trim() || null,
       latitude: this.profile()?.latitude ?? null,
       longitude: this.profile()?.longitude ?? null,
@@ -644,6 +685,7 @@ export class Profile {
     this.addrForm.patchValue({
       address: a.address || this.addrForm.controls.address.value,
       city: a.city || this.addrForm.controls.city.value,
+      state: a.state || this.addrForm.controls.state.value,
       pincode: a.pincode || this.addrForm.controls.pincode.value,
     });
   }
@@ -672,7 +714,13 @@ export class Profile {
     event.stopPropagation();
     this.editingId.set(a.id);
     this.addLocation.set({ lat: a.latitude, lng: a.longitude });
-    this.addrForm.reset({ label: a.label, address: a.address, city: '', pincode: '' });
+    this.addrForm.reset({
+      label: a.label,
+      address: a.address,
+      city: a.city ?? '',
+      state: a.state ?? '',
+      pincode: a.pincode ?? '',
+    });
     this.addrValidated = false;
     this.addrErrors.set({});
     this.addOpen.set(true);
@@ -694,15 +742,24 @@ export class Profile {
       return;
     }
 
+    // City/state/pincode go as their own fields. They used to be concatenated into `address`,
+    // which is why editing an address couldn't put them back in their own inputs.
     const v = this.addrForm.getRawValue();
-    const label = v.label.trim();
-    const address = [v.address.trim(), v.city.trim(), v.pincode.trim()].filter(Boolean).join(', ');
+    const draft: PickupAddressDraft = {
+      label: v.label,
+      address: v.address,
+      city: v.city,
+      state: v.state,
+      pincode: v.pincode,
+      latitude: loc.lat,
+      longitude: loc.lng,
+    };
 
     const editId = this.editingId();
     this.savingAddr.set(true);
     const request$ = editId
-      ? this.pickup.update(editId, label, address, loc.lat, loc.lng, this.isDefaultOf(editId))
-      : this.pickup.create(label, address, loc.lat, loc.lng);
+      ? this.pickup.update(editId, draft, this.isDefaultOf(editId))
+      : this.pickup.create(draft);
 
     request$.subscribe({
       next: () => {
@@ -762,6 +819,8 @@ export class Profile {
         return control.hasError('required') ? 'A label is required' : 'Label must be 100 characters or fewer';
       case 'address':
         return control.hasError('required') ? 'The address is required' : 'Address must be 500 characters or fewer';
+      case 'state':
+        return 'State must be 100 characters or fewer';
       case 'pincode':
         return 'Pincode must be up to 6 digits';
       default:
@@ -795,7 +854,7 @@ export class Profile {
     this.addLocation.set(null);
     this.addrValidated = false;
     this.addrErrors.set({});
-    this.addrForm.reset({ label: '', address: '', city: '', pincode: '' });
+    this.addrForm.reset({ label: '', address: '', city: '', state: '', pincode: '' });
   }
 
   private applyProfile(p: UserProfile): void {
@@ -807,6 +866,8 @@ export class Profile {
       {
         name: p.name,
         city: p.city ?? '',
+        state: p.state ?? '',
+        pincode: p.pincode ?? '',
         address: p.address ?? '',
         capacity: p.capacityMeals != null ? String(p.capacityMeals) : '',
         mobile: p.mobile,

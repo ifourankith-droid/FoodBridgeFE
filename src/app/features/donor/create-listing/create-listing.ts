@@ -152,10 +152,13 @@ import { DonationConsentDialog } from './donation-consent-dialog';
                 <div class="text-muted text-xs">Every listing counts</div>
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-2 text-center">
+            <!-- Only what the backend actually reports. A third "CO₂ saved" tile used to sit
+                 here, computed client-side as meals × 0.45 — the API has no such measure and a
+                 meal has no defined weight, so the figure was invented. Admin reports dropped
+                 its equivalent tile for the same reason. -->
+            <div class="grid grid-cols-2 gap-2 text-center">
               <div><div class="impact-num">{{ dashboard()?.totalMealsDonated ?? 0 }}</div><div class="text-muted text-[11px]">Meals saved</div></div>
               <div><div class="impact-num">{{ dashboard()?.totalDonations ?? 0 }}</div><div class="text-muted text-[11px]">Donations</div></div>
-              <div><div class="impact-num">{{ co2() }}kg</div><div class="text-muted text-[11px]">CO₂ saved</div></div>
             </div>
           </div>
 
@@ -354,7 +357,6 @@ export class CreateListing {
   private photoFile: File | null = null;
   /** Consolidated donor dashboard — powers both the impact stats and the nearby recipients. */
   protected readonly dashboard = signal<DonorDashboard | null>(null);
-  protected readonly co2 = computed(() => Math.round((this.dashboard()?.totalMealsDonated ?? 0) * 0.45));
   /** Real recipients waiting near the chosen pickup address (from the donor dashboard). */
   protected readonly nearbyRecipients = computed(() => this.dashboard()?.nearbyRecipients ?? []);
 
