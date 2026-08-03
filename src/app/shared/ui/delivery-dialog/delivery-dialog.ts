@@ -13,7 +13,7 @@ import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
 import { FbButton } from '@shared/ui/button/button';
 import { FbInput, FbSelectOption } from '@shared/ui/input/input';
 import { FbSelect } from '@shared/ui/select/select';
-import { ImagePicker } from '@shared/ui/image-picker/image-picker';
+import { IMAGE_ACCEPT, ImagePicker } from '@shared/ui/image-picker/image-picker';
 
 /** Sentinel option value for the "add a new spot" branch. */
 const NEW_SPOT = '__new__';
@@ -60,7 +60,7 @@ export interface DeliveryDialogData {
             ? 'Photograph the drop-off — this is the delivery record.'
             : 'Photograph the handover, so the recipient can confirm it.'
         "
-        accept="image/jpeg,image/png"
+        [accept]="imageAccept"
         [maxSizeMb]="5"
         (fileChange)="file.set($event)"
       />
@@ -127,6 +127,7 @@ export interface DeliveryDialogData {
 })
 export class DeliveryDialog {
   protected readonly data = inject<DeliveryDialogData>(DIALOG_DATA);
+  protected readonly imageAccept = IMAGE_ACCEPT;
   private readonly dropOffs = inject(DropOffLocationService);
   private readonly geo = inject(GeolocationService);
   private readonly toast = inject(ToastService);

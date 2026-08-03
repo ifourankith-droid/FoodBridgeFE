@@ -136,6 +136,26 @@ describe('ImagePicker', () => {
       pick(fixture, fakeFile('pic.webp', 'image/webp', 100));
       expect(emitted.length).toBe(1);
     });
+
+    /**
+     * Windows reports .jfif as image/pjpeg — and .avif as nothing at all on older
+     * builds. Both are real photos the OS simply mislabels, so the extension has
+     * to be enough on its own; matching on type alone rejected them outright.
+     */
+    it('accepts an image the OS mislabels, by its extension', () => {
+      pick(fixture, fakeFile('meal.jfif', 'image/pjpeg', 100));
+      pick(fixture, fakeFile('meal.avif', '', 100));
+
+      expect(emitted.length).toBe(2);
+      expect(query(fixture, '.msg.is-error')).toBeNull();
+    });
+
+    it('previews a type-less image as an image, not a document tile', () => {
+      pick(fixture, fakeFile('meal.jfif', '', 100));
+
+      expect(query(fixture, '.preview img')).toBeTruthy();
+      expect(query(fixture, '.preview .doc')).toBeNull();
+    });
   });
 
   describe('existingUrl', () => {

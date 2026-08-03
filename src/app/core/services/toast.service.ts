@@ -56,10 +56,15 @@ export class ToastService {
    * Backwards-compatible entry point. Existing callers pass a Font Awesome
    * icon class and a message; the toast type (and its accent colour) is
    * inferred from the icon so those calls light up correctly without changes.
+   *
+   * Pass `type` whenever the icon describes the *subject* rather than the
+   * outcome — a successful cancellation carries `fa-ban` but is not a failure,
+   * and inference has no way to know that. The guess is a convenience, not a
+   * contract: an explicit type always wins.
    */
-  show(icon: string, message: string): number {
+  show(icon: string, message: string, type?: ToastType): number {
     return this.enqueue({
-      type: this.inferType(icon),
+      type: type ?? this.inferType(icon),
       icon,
       message,
     });
@@ -138,7 +143,12 @@ export class ToastService {
       // hard failures; treat it as a warning so it reads as recoverable.
       return 'warning';
     }
-    if (icon.includes('ban') || icon.includes('xmark') || icon.includes('circle-xmark')) {
+    // Deliberately not 'ban': `fa-ban` is this app's *cancelled status* icon
+    // (see STATUS_ICONS in listing.model), so it turns up on confirmations of a
+    // cancellation that worked. Reading it as a failure is what made "Listing
+    // cancelled" render under the error type's default title, "Something went
+    // wrong", after a perfectly successful request.
+    if (icon.includes('xmark')) {
       return 'error';
     }
     if (icon.includes('circle-check') || icon.includes('user-check') || icon.includes('check')) {

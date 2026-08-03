@@ -24,6 +24,31 @@ import { CameraDialog, CameraResult } from './camera-dialog';
 export type ImageSource = 'both' | 'upload' | 'camera';
 
 /**
+ * Every image format a browser can both pick and render, listed by MIME type
+ * **and** by extension — the default for every image field in the app, and the
+ * mirror of `ImageFileTypes` on the backend.
+ *
+ * The extensions are not redundant. Windows reports `.jfif` (what Chrome's "Save
+ * image as" writes) as `image/pjpeg`, and sometimes as nothing at all, so a
+ * MIME-only list hides those files in the picker and then rejects them on drop —
+ * which is exactly the bug this replaced. `accept` takes either form, and
+ * {@link ImagePicker} validates against both.
+ *
+ * SVG is left out on purpose: it's a scriptable document, not a picture, so
+ * serving user-supplied ones back is stored XSS. HEIC/TIFF are left out because
+ * they upload fine and then show as a broken image in most desktop browsers.
+ */
+export const IMAGE_ACCEPT =
+  'image/jpeg,image/pjpeg,image/png,image/apng,image/webp,image/avif,image/gif,image/bmp,' +
+  '.jpg,.jpeg,.jfif,.jif,.jpe,.pjpeg,.pjp,.png,.apng,.webp,.avif,.gif,.bmp,.dib';
+
+/** {@link IMAGE_ACCEPT} plus PDF, for fields where a scan is as good as a photo. */
+export const IMAGE_OR_PDF_ACCEPT = `${IMAGE_ACCEPT},application/pdf,.pdf`;
+
+/** Every spelling of JPEG collapses to one label, so the hint reads "JPG", once. */
+const JPEG_ALIASES = new Set(['jpg', 'jpeg', 'jfif', 'jif', 'jpe', 'pjpeg', 'pjp']);
+
+/**
  * Pick an image by file, drag-and-drop, or the device camera, then preview and
  * remove it. One component for every image field in the app.
  *
@@ -466,7 +491,7 @@ export class ImagePicker {
 
   readonly label = input('');
   readonly hint = input('');
-  readonly accept = input('image/jpeg,image/png,image/webp,image/avif');
+  readonly accept = input(IMAGE_ACCEPT);
   readonly maxSizeMb = input(5);
   readonly disabled = input(false);
   readonly required = input(false);
@@ -552,7 +577,10 @@ export class ImagePicker {
   protected readonly isDocument = computed(() => {
     const file = this.selected();
     if (file) {
-      return !file.type.toLowerCase().startsWith('image/');
+      // Asks "is it a PDF?", not "is it missing an image/ type?" — the OS leaves
+      // that type blank for formats it doesn't recognise (.jfif, .avif on older
+      // Windows), and those are pictures an <img> renders perfectly well.
+      return file.type.toLowerCase() === 'application/pdf' || /\.pdf$/i.test(file.name);
     }
     const url = this.existingUrl();
     return !!url && /\.pdf(?:[?#]|$)/i.test(url);
@@ -578,14 +606,28 @@ export class ImagePicker {
     return this.isDocument() ? 'Current document' : 'Current image';
   });
 
-  /** "JPG or PNG" from the accept list, for the hint line. */
+  /**
+   * "JPG, PNG, WEBP and more" from the accept list, for the hint line and the
+   * rejection message. Entries may be MIME types or extensions and the same
+   * format appears as both, so it dedupes; and the full image list is a dozen
+   * entries, which would swamp an 11px hint — hence the cut-off.
+   */
   protected readonly acceptLabel = computed(() => {
-    const exts = this.accept()
-      .split(',')
-      .map((t) => t.trim().split('/')[1]?.toUpperCase())
-      .filter((t): t is string => !!t && t !== '*')
-      .map((t) => (t === 'JPEG' ? 'JPG' : t));
-    return exts.length ? exts.join(' or ') : 'Image';
+    const names = new Set<string>();
+    for (const entry of this.accept().split(',')) {
+      const token = entry.trim().toLowerCase();
+      const name = token.startsWith('.') ? token.slice(1) : token.split('/')[1];
+      if (!name || name === '*') {
+        continue;
+      }
+      names.add(JPEG_ALIASES.has(name) ? 'JPG' : name.toUpperCase());
+    }
+    const all = [...names];
+    if (!all.length) {
+      return 'Image';
+    }
+    const shown = all.slice(0, 3);
+    return all.length > shown.length ? `${shown.join(', ')} and more` : shown.join(' or ');
   });
 
   constructor() {
@@ -714,11 +756,24 @@ export class ImagePicker {
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
     const type = file.type.toLowerCase();
+    const name = file.name.toLowerCase();
+    const dot = name.lastIndexOf('.');
+    const extension = dot > 0 ? name.slice(dot) : '';
+    // Either axis is enough. The OS decides what MIME type a file gets, and it
+    // gets it wrong often — a .jfif arrives as image/pjpeg on Windows and with
+    // an empty type on some others — so a type-only check rejects real photos
+    // that the picker itself was happy to offer.
     const typeOk =
       !allowed.length ||
-      allowed.some((a) =>
-        a.endsWith('/*') ? type.startsWith(a.slice(0, -1)) : a === type,
-      );
+      allowed.some((a) => {
+        if (a.startsWith('.')) {
+          return a === extension;
+        }
+        if (a.endsWith('/*')) {
+          return !!type && type.startsWith(a.slice(0, -1));
+        }
+        return a === type;
+      });
     if (!typeOk) {
       return `That file is not supported. Use ${this.acceptLabel()}.`;
     }

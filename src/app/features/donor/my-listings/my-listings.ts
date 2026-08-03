@@ -478,7 +478,9 @@ export class MyListings {
         .pipe(
           tap(() => {
             ref.close();
-            this.toast.show('fa-solid fa-ban', 'Listing cancelled');
+            // 'success' stated outright: the icon is the cancelled-status glyph,
+            // which says nothing about whether the request worked.
+            this.toast.show('fa-solid fa-ban', 'Listing cancelled', 'success');
             this.load();
           }),
           catchError((err: Error) => {

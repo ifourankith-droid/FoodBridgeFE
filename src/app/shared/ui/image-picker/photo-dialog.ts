@@ -3,7 +3,7 @@ import { Observable, tap } from 'rxjs';
 import type { DialogService } from '@core/services/dialog.service';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
 import { DIALOG_DATA } from '@shared/ui/dialog/dialog.model';
-import { ImagePicker, ImageSource } from './image-picker';
+import { IMAGE_ACCEPT, ImagePicker, ImageSource } from './image-picker';
 
 /** Everything the photo dialog's body renders. Passed as the dialog's `data`. */
 export interface PhotoDialogData {
@@ -32,7 +32,7 @@ export interface PhotoDialogData {
       [sources]="data.sources ?? 'both'"
       [hint]="data.hint ?? ''"
       [placeholder]="data.placeholder ?? ''"
-      [accept]="data.accept ?? 'image/jpeg,image/png'"
+      [accept]="data.accept ?? defaultAccept"
       [maxSizeMb]="data.maxSizeMb ?? 5"
       (fileChange)="file.set($event)"
     />
@@ -40,6 +40,8 @@ export interface PhotoDialogData {
 })
 export class PhotoDialog {
   protected readonly data = inject<PhotoDialogData>(DIALOG_DATA);
+
+  protected readonly defaultAccept = IMAGE_ACCEPT;
 
   /** The photo currently held by the picker, or null while it is still empty. */
   readonly file = signal<File | null>(null);

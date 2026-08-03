@@ -172,6 +172,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
         grid-template-areas:
           'summary aside'
           'grid    aside';
+        grid-template-rows: auto 1fr;
         align-items: start;
       }
       .ll-body--aside .ll-aside {

@@ -145,8 +145,9 @@ export class CameraDialog {
     canvas.height = el.videoHeight;
     canvas.getContext('2d')?.drawImage(el, 0, 0);
 
-    // The backend accepts JPEG/PNG; JPEG at 0.9 keeps captures well under the
-    // size cap without visible loss.
+    // JPEG at 0.9 keeps captures well under the size cap without visible loss.
+    // It's also in every accept list in the app, so a capture is never the thing
+    // a field rejects.
     canvas.toBlob(
       (blob) => {
         if (!blob) {

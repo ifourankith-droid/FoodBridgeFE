@@ -12,6 +12,7 @@ import {
   UserVerification,
 } from '@core/models/verification.model';
 import { FbButton } from '@shared/ui/button/button';
+import { IMAGE_ACCEPT, IMAGE_OR_PDF_ACCEPT } from '@shared/ui/image-picker/image-picker';
 import { openPhotoDialog } from '@shared/ui/image-picker/photo-dialog';
 import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
 import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
@@ -371,7 +372,7 @@ export class Verification {
       // A selfie should be taken now, not picked from the gallery; an ID is usually already a
       // file or scan, so that one allows both.
       sources: row.type === 'Selfie' ? 'camera' : 'both',
-      accept: row.type === 'Selfie' ? 'image/jpeg,image/png' : 'image/jpeg,image/png,application/pdf',
+      accept: row.type === 'Selfie' ? IMAGE_ACCEPT : IMAGE_OR_PDF_ACCEPT,
       maxSizeMb: 5,
       submit: (file) =>
         this.users.uploadDocument(userId, row.type, file).pipe(

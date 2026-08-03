@@ -6,6 +6,33 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## ListingLayout: dead space under the summary card when the aside is tall
+
+**Done by me on 2026-08-03**
+
+### Problem
+The Verification page showed ~170px of empty space between the "You're verified"
+summary card and the first document row. Not a Verification bug — it's in the
+shared layout, and any page whose list is shorter than its aside had it.
+
+From 1280px up `.ll-body--aside` is `'summary aside' / 'grid aside'`, so the aside
+spans **both** rows. When it's taller than the summary and grid combined, CSS Grid
+splits the surplus **equally between the two auto rows** — half of it lands under
+the summary card, where there's nothing to fill it. (Verification: 259px of surplus
+→ 129px added to each row, which is exactly the gap that showed.)
+
+### Fix
+- **`src/app/shared/ui/listing-layout/listing-layout.ts`** — added
+  `grid-template-rows: auto 1fr` inside the `min-width: 1280px` block. Row 1 is
+  then pinned to the summary's own height and row 2 absorbs all the flex, so the
+  surplus goes *below* the grid where there's nothing to push apart.
+
+Safe for the taller-list pages too: `1fr` floors at `auto`, so when the grid is the
+tall one the rows are content-sized exactly as before. Verified in Chrome with a
+standalone repro — dead space went 173px → 0px, with the tall-grid case unchanged.
+
+---
+
 ## Leaderboard: rebuilt on the shared listing layout
 
 **Done by me on 2026-08-01**
@@ -104,10 +131,17 @@ way to out-stack a modal `<dialog>`.
 Logged in `../../FoodBridgeBE/KNOWLEDGE.md`; noted here because they change what
 the UI can do:
 
-- **Listing food-photo upload now accepts WebP & AVIF.** The New Donation form's
-  `<app-image-picker>` already accepts `image/jpeg,image/png,image/webp,image/avif`;
-  the backend was widened to match, so a WebP/AVIF photo no longer saves the
-  listing while silently dropping the photo. No frontend change was required.
+- **Every upload path now accepts the whole browser-renderable image set.**
+  Previously each screen carried its own hand-written accept list, and the
+  narrowest of them (`image/jpeg,image/png`) refused `.jfif` — the file Chrome's
+  "Save image as" produces on Windows. `IMAGE_ACCEPT` / `IMAGE_OR_PDF_ACCEPT` in
+  `@shared/ui/image-picker/image-picker` are now the only lists, mirrored by
+  `ImageFileTypes` on the backend. Two rules matter when touching this:
+  - The list carries **extensions as well as MIME types**, because Windows reports
+    `.jfif` as `image/pjpeg` and sometimes reports no type at all. `ImagePicker`
+    validates on either axis; a type-only check rejects real photos.
+  - SVG is excluded deliberately (stored XSS — we serve uploads back), as are
+    HEIC/TIFF (upload fine, render as a broken image on most desktop browsers).
 - **`GET /listings/deliveries` now includes each delivery's `timeline`.** The
   `ApiListing` model already declares `timeline`, so it is received automatically.
   The delivery detail dialog still uses the standalone `GET /listings/{id}/timeline`

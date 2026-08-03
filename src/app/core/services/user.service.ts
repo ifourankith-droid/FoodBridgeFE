@@ -31,7 +31,7 @@ export class UserService {
     return this.api.patch<UserProfile>(API_ENDPOINTS.users.availability(id), { isAvailable });
   }
 
-  /** Upload a profile photo (multipart, JPG/PNG, max 2MB). */
+  /** Upload a profile photo (multipart, any browser-renderable image, max 2MB). */
   uploadAvatar(id: string, file: File): Observable<AvatarUploadResult> {
     const form = new FormData();
     form.append('file', file);
@@ -47,7 +47,7 @@ export class UserService {
   }
 
   /**
-   * Upload or replace one verification document (multipart, JPG/PNG/PDF, max 5MB; a Selfie must
+   * Upload or replace one verification document (multipart, image or PDF, max 5MB; a Selfie must
    * be an image). Re-uploading the same `type` replaces it server-side and deletes the old file,
    * so a bad photo can simply be retaken. Returns the refreshed verification state.
    */

@@ -41,12 +41,12 @@ export const DOCUMENT_META: Record<UserDocumentType, { label: string; hint: stri
   {
     IdProof: {
       label: 'Government photo ID',
-      hint: 'Aadhaar, driving licence, voter ID or passport. JPG, PNG or PDF, up to 5MB.',
+      hint: 'Aadhaar, driving licence, voter ID or passport. Any common image or a PDF, up to 5MB.',
       icon: 'fa-solid fa-id-card',
     },
     Selfie: {
       label: 'Selfie',
-      hint: 'A clear photo of your face so we can check it against your ID. JPG or PNG.',
+      hint: 'A clear photo of your face so we can check it against your ID.',
       icon: 'fa-solid fa-camera',
     },
   };
