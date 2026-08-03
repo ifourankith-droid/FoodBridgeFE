@@ -10,6 +10,7 @@ import { ListingService } from '@core/services/listing.service';
 import { ReportService } from '@core/services/report.service';
 import { ToastService } from '@core/services/toast.service';
 import { FbButton } from '@shared/ui/button/button';
+import { openDeliveryDialog } from '@shared/ui/delivery-dialog/delivery-dialog';
 import { openRaiseDisputeDialog } from '@shared/ui/dispute-dialog/dispute-dialog';
 import { ListingCard } from '@shared/ui/listing-card/listing-card';
 import type { DialogRef } from '@shared/ui/dialog/dialog-ref';
@@ -384,6 +385,19 @@ export class MyListings {
               this.edit(l);
             },
           },
+          // Available for the whole time a listing is unclaimed, not just after the halfway
+          // nudge — a donor who already knows nobody is coming shouldn't have to wait for a
+          // timer. The nudge notification just draws attention to it.
+          {
+            id: 'self-deliver',
+            label: 'Deliver it myself',
+            icon: 'fa-solid fa-person-walking',
+            variant: 'outline',
+            handler: (ref) => {
+              ref.close();
+              this.selfDeliver(l);
+            },
+          },
           { id: 'close', label: 'Close', variant: 'ghost', close: true },
         ]
         : [
@@ -477,6 +491,65 @@ export class MyListings {
         )
         .subscribe({ complete: () => resolve() });
     });
+  }
+
+  /**
+   * Deliver an unclaimed donation yourself instead of waiting for a volunteer — the escape hatch
+   * the halfway-unclaimed notification points at.
+   *
+   * Reuses the volunteer's delivery dialog verbatim, so the donor picks from the same nearby
+   * drop-off spots and produces the same delivery record. The listing summary carries no
+   * coordinates, so fetch the detail first to centre the spot search on the pickup point.
+   */
+  private selfDeliver(l: ApiListingSummary): void {
+    this.listingService
+      .getById(l.id)
+      .pipe(
+        catchError((err: Error) => {
+          this.toast.show(
+            'fa-solid fa-triangle-exclamation',
+            err.message || 'Could not open this donation',
+          );
+          return EMPTY;
+        }),
+      )
+      .subscribe((listing) => {
+        openDeliveryDialog(
+          this.dialog,
+          {
+            latitude: listing.latitude,
+            longitude: listing.longitude,
+            suggestedLocationId: null,
+            // Nobody comes after the donor: this is the last step, and it issues the certificate.
+            completesDonation: true,
+            // Self-delivery only exists while the listing is unclaimed, so there is never a
+            // matched recipient to offer as the destination.
+            recipientName: null,
+            selfDelivery: true,
+          },
+          (photo, dropOff) =>
+            this.listingService.selfDeliver(l.id, photo, dropOff).pipe(
+              tap(() => {
+                this.toast.show(
+                  'fa-solid fa-circle-check',
+                  'Delivered — your certificate is ready',
+                );
+                this.load();
+              }),
+              catchError((err: Error) => {
+                this.toast.show(
+                  'fa-solid fa-triangle-exclamation',
+                  err.message || 'Could not record this delivery',
+                );
+                // Swallowed so the dialog stays open with the photo and spot intact — but the
+                // list still reloads, because a 409 means a volunteer claimed it a moment ago
+                // and the donor's card is now out of date.
+                this.load();
+                return EMPTY;
+              }),
+            ),
+        );
+      });
   }
 
   /** Load the donor's full listing history once; the multi-selects filter it client-side. */

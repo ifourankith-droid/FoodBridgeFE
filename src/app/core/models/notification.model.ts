@@ -30,6 +30,7 @@ export type NotificationType =
   | 'ListingClaimed'
   | 'ListingPickedUp'
   | 'ListingUnclaimed'
+  | 'ListingHalfwayUnclaimed'
   | 'ListingExpired'
   | 'DonationConfirmed'
   // client-side only
@@ -143,6 +144,15 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
     category: 'donations',
     action: { view: 'listings', label: 'View my donations' },
   },
+  ListingHalfwayUnclaimed: {
+    icon: 'fa-solid fa-hourglass-half',
+    color: '#d97706',
+    label: 'Still unclaimed',
+    category: 'donations',
+    // Half the pickup window has gone with nobody coming. Sends them to My Donations, where the
+    // "Deliver it myself" action lives — the whole point of the nudge is that action.
+    action: { view: 'listings', label: 'View my donations' },
+  },
   ListingExpired: {
     icon: 'fa-solid fa-clock',
     color: 'var(--fb-muted)',
@@ -160,11 +170,25 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
     action: { view: 'leaderboard', label: 'View leaderboard' },
   },
   // Client-side events pushed by NotificationService.push() — no destination.
+  // Stays the *first* 'updates' entry so `categoryColor()` keeps returning its neutral primary
+  // for the Updates chip; anything added below inherits the bucket without repainting it.
   Local: {
     icon: 'fa-solid fa-bell',
     color: 'var(--fb-primary)',
     label: 'Update',
     category: 'updates',
+  },
+  /**
+   * Sent when an admin verifies (or reinstates) an account. The only type that isn't tied to a
+   * single role, so its destination has to be somewhere every role can reach — the dashboard.
+   * `NotificationRouter` re-checks the view against the signed-in role regardless.
+   */
+  AccountVerified: {
+    icon: 'fa-solid fa-user-check',
+    color: 'var(--fb-success)',
+    label: 'Account verified',
+    category: 'updates',
+    action: { view: 'dashboard', label: 'Go to dashboard' },
   },
 };
 

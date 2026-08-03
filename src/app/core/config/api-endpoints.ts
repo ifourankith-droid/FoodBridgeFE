@@ -44,6 +44,8 @@ export const API_ENDPOINTS = {
     /** Lifecycle timeline for one listing — usable by any party (donor/volunteer). */
     timeline: (id: Id) => `listings/${id}/timeline`,
     cancel: (id: Id) => `listings/${id}/cancel`,
+    /** Donor delivers their own still-unclaimed listing (Pending → Confirmed). */
+    selfDeliver: (id: Id) => `listings/${id}/self-deliver`,
     images: (id: Id) => `listings/${id}/images`,
     // Volunteer
     nearby: 'listings/nearby',

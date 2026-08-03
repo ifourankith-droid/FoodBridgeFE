@@ -155,12 +155,14 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
                   <i class="fa-solid fa-city mr-1"></i>{{ l.city }} ·
                 }
                 <i class="fa-solid fa-location-crosshairs mr-1"></i>{{ l.latitude.toFixed(4) }}, {{ l.longitude.toFixed(4) }}
-                <!-- Volunteer-added spots go live without review, so make their origin
-                     obvious: this badge is how an admin spots one worth retiring. -->
+                <!-- Field-added spots go live without review, so make their origin obvious:
+                     this badge is how an admin spots one worth retiring. "In the field" rather
+                     than "by a volunteer" because self-delivering donors add them too — the
+                     wire value stayed 'Volunteer', but it means "recorded during a delivery". -->
                 @if (l.source === 'Volunteer') {
                   ·
                   <span class="src-tag">
-                    <i class="fa-solid fa-user-plus mr-1"></i>added by a volunteer
+                    <i class="fa-solid fa-user-plus mr-1"></i>added in the field
                   </span>
                 }
               </div>
@@ -265,8 +267,8 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
               <div class="text-muted text-[11px]">Admin</div>
             </div>
             <div>
-              <div class="fb-impact-num">{{ volunteerAdded() }}</div>
-              <div class="text-muted text-[11px]">Volunteers</div>
+              <div class="fb-impact-num">{{ fieldAdded() }}</div>
+              <div class="text-muted text-[11px]">In the field</div>
             </div>
           </div>
         </div>
@@ -345,11 +347,12 @@ export class DropOffLocations {
   protected readonly retiredCount = computed(
     () => this.locations().length - this.activeCount(),
   );
-  protected readonly volunteerAdded = computed(
+  /** Spots discovered while recording a delivery — by a volunteer or a self-delivering donor. */
+  protected readonly fieldAdded = computed(
     () => this.locations().filter((l) => l.source === 'Volunteer').length,
   );
   protected readonly adminAdded = computed(
-    () => this.locations().length - this.volunteerAdded(),
+    () => this.locations().length - this.fieldAdded(),
   );
 
   protected readonly statusBreakdown = computed(() => {

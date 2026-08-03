@@ -5,8 +5,10 @@ export type DropOffLocationSource = 'Admin' | 'Volunteer';
  * A place food can be taken — `DropOffLocationResponse`.
  *
  * The pool is shared and grows two ways: admins curate partner collection points
- * (`source: 'Admin'`), and volunteers add spots they find in the field when recording
- * a delivery (`source: 'Volunteer'`, live immediately). The nearest *available* one —
+ * (`source: 'Admin'`), and whoever is carrying the food adds spots they find in the field
+ * when recording a delivery (`source: 'Volunteer'`, live immediately). Despite the name that
+ * second value covers self-delivering donors too — read it as "added during a delivery";
+ * `addedByName` is who actually added it. The nearest *available* one —
  * skipping anything on cooldown — is suggested on the confirm-pickup response as
  * `ApiListing.suggestedDropOffLocation`.
  */

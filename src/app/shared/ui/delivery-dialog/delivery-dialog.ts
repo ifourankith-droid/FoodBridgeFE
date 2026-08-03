@@ -31,6 +31,12 @@ export interface DeliveryDialogData {
   completesDonation: boolean;
   /** The matched recipient's name, when one exists — offered as the pre-selected drop-off. */
   recipientName?: string | null;
+  /**
+   * The donor is delivering their own unclaimed listing rather than a volunteer confirming one.
+   * Wording only — the photo and drop-off collected are identical, which is the point: the same
+   * delivery record is produced either way.
+   */
+  selfDelivery?: boolean;
 }
 
 /**
@@ -289,11 +295,13 @@ export function openDeliveryDialog(
     DeliveryDialog
   >({
     header: {
-      title: 'Confirm delivery',
-      subtitle: data.completesDonation
-        ? 'A photo and drop-off point are required. This completes the donation.'
-        : 'A photo and drop-off point are required.',
-      icon: 'fa-solid fa-box-open',
+      title: data.selfDelivery ? 'Deliver it yourself' : 'Confirm delivery',
+      subtitle: data.selfDelivery
+        ? 'Choose where you dropped it off and add a photo. This completes the donation.'
+        : data.completesDonation
+          ? 'A photo and drop-off point are required. This completes the donation.'
+          : 'A photo and drop-off point are required.',
+      icon: data.selfDelivery ? 'fa-solid fa-person-walking' : 'fa-solid fa-box-open',
     },
     content: DeliveryDialog,
     data,
@@ -302,7 +310,7 @@ export function openDeliveryDialog(
       { id: 'cancel', label: 'Cancel', variant: 'ghost', close: true },
       {
         id: 'confirm',
-        label: 'Confirm delivery',
+        label: data.selfDelivery ? 'Mark as delivered' : 'Confirm delivery',
         icon: 'fa-solid fa-check',
         disabled: () => {
           const body = ref.body();

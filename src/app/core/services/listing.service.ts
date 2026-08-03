@@ -165,6 +165,29 @@ export class ListingService {
    * neither, is a 422.
    */
   confirmDelivery(id: string, photo: File, dropOff: DropOffSelection): Observable<ApiListing> {
+    return this.api.post<ApiListing>(
+      API_ENDPOINTS.listings.confirmDelivery(id),
+      this.dropOffForm(photo, dropOff),
+    );
+  }
+
+  /**
+   * The donor delivers their own still-unclaimed listing themselves (Pending → Confirmed), rather
+   * than wait for a volunteer who may never come. Issues their certificate; awards no volunteer
+   * points, since no volunteer was involved.
+   *
+   * Same photo + drop-off contract as {@link confirmDelivery}. Returns **409** if a volunteer claims
+   * the listing first — surface that as "a volunteer just took it", not a generic failure.
+   */
+  selfDeliver(id: string, photo: File, dropOff: DropOffSelection): Observable<ApiListing> {
+    return this.api.post<ApiListing>(
+      API_ENDPOINTS.listings.selfDeliver(id),
+      this.dropOffForm(photo, dropOff),
+    );
+  }
+
+  /** Photo + either an existing drop-off id or a new spot — shared by both delivery endpoints. */
+  private dropOffForm(photo: File, dropOff: DropOffSelection): FormData {
     const form = this.photo(photo);
     if ('locationId' in dropOff) {
       form.append('dropOffLocationId', dropOff.locationId);
@@ -176,7 +199,7 @@ export class ListingService {
         form.append('locationAddress', dropOff.address);
       }
     }
-    return this.api.post<ApiListing>(API_ENDPOINTS.listings.confirmDelivery(id), form);
+    return form;
   }
 
   private photo(file: File): FormData {

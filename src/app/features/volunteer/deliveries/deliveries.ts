@@ -18,7 +18,7 @@ import { ListingLayout } from '@shared/ui/listing-layout/listing-layout';
 import { ListingFilters, statusOptionsFrom } from '@shared/ui/listing-filters/listing-filters';
 import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
 import { openPhotoDialog } from '@shared/ui/image-picker/photo-dialog';
-import { openDeliveryDialog } from './delivery-dialog';
+import { openDeliveryDialog } from '@shared/ui/delivery-dialog/delivery-dialog';
 import { DeliveryDetailDialog } from './delivery-detail-dialog';
 import { FbLatLng } from '@shared/ui/map/fb-map.model';
 import { openRouteDialog, RouteContact, RouteStop } from '@shared/ui/route-dialog/route-dialog';
