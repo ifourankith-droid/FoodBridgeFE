@@ -6,6 +6,60 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## Notification dropdown: two scrollbars, a clipped filter, an unreachable footer
+
+**Done by me on 2026-08-03**
+
+### What was wrong
+Measured on the real panel (logged-in session + CDP), it had **two nested scrollers** —
+`div.pm-popover` and `div.panel-list` — so two scrollbars sat side by side and the
+footer could be scrolled out of reach. "View all notifications" is the only route to
+the inbox, and it was behind a scroll nobody would think to perform.
+
+Separately, six filter chips need ~460px in a 380px panel. `.chips.is-compact` scrolled
+sideways with `scrollbar-width: none`, so the row was scrollable with **no affordance
+saying so** — it just showed a permanently half-cut "Donations" and read as broken.
+Only 3½ of the 6 filters were reachable in practice.
+
+### Fix
+- **`popover-menu.ts`** — new `panelScrolls` input. When set, `.pm-popover` becomes a
+  flex column with `overflow: hidden` and stops scrolling itself, letting the projected
+  panel own it. Default false, so simple menus are untouched.
+- **`notification-bell.ts`** — passes it; header/filters/footer are `flex: none` and
+  `.panel-list` takes the leftover height. Dropped the list's own `max-height`: two
+  competing height caps is what produced the second bar.
+- **`notification-filters.ts`** — the compact row wraps instead of side-scrolling. The
+  original reason for scrolling (keeping the panel a fixed height) no longer applies now
+  the list is a flex region — the second chip row costs the list height, not the panel.
+
+Verified: nested scrollers `["panel-list", "pm-popover"]` → `["panel-list"]`, and
+children escaping the panel box 6 → 0. All six chips visible, footer always on screen.
+
+---
+
+## Profile & Certificates: skeletons instead of a spinner line
+
+**Done by me on 2026-08-03**
+
+`.sk` / `.sk-card` + `fb-shimmer` **moved from `listing-grid.scss` to `styles.scss`**.
+They were component-scoped, so the two new pages could not have reused them without a
+copy — and a second copy is how two skeletons end up shimmering at different rates on
+one screen. `listing-grid.scss` is now a pointer to that.
+
+- **`certificates.ts`** — six placeholder cards tracing the real one (award mark, number,
+  meta, download button) in the *same* grid and gap, so nothing shifts when data lands.
+- **`profile.ts`** — mirrors the two-card layout: avatar circle, name/meta bars, five
+  labelled field rows, save button, plus the pickup-address card for donors.
+
+### The subtle bit
+The profile skeleton must know whether to draw one card or two, and `isDonor()` reads
+the **fetched** profile — always false while loading. Using it drew one card, then two
+once the response arrived: exactly the layout jump a skeleton exists to absorb. Hence
+`skeletonIsDonor`, off `AuthService.currentUser()`, which is known before the request.
+Caught by counting `.sk-card` in the DOM mid-load (1, should be 2), not by eye.
+
+---
+
 ## Profile on mobile: 124px of horizontal scroll, and a crushed address row
 
 **Done by me on 2026-08-03**

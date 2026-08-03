@@ -44,6 +44,7 @@ import {
       align="end"
       panelClass="w-[380px]"
       ariaLabel="Notifications"
+      [panelScrolls]="true"
     >
       <button
         fbTrigger
@@ -158,9 +159,19 @@ import {
     }
 
     /* ---- Panel body (frame + positioning come from <app-popover-menu>) ---- */
+    /* min-height:0 is what lets .panel-list actually shrink and scroll inside the
+       popover's max-height instead of pushing the footer past its bottom edge. */
     .notif {
       display: flex;
       flex-direction: column;
+      min-height: 0;
+    }
+
+    /* Header and filters stay put; only the list moves. */
+    .panel-head,
+    .panel-filters,
+    .panel-foot {
+      flex: none;
     }
 
     .panel-head {
@@ -223,15 +234,18 @@ import {
       border-bottom: 1px solid var(--fb-line);
     }
 
+    /* The only scrolling region in the panel. It takes whatever height is left
+       after the header, filters and footer, rather than carrying a max-height of
+       its own — two competing height caps is what produced the second scrollbar. */
     .panel-list {
       display: flex;
       flex-direction: column;
       gap: 3px;
       padding: 7px;
-      /* The preview is capped at four rows, so this only ever engages when a
-         body wraps unusually long — it keeps the panel inside the viewport. */
-      max-height: min(60vh, 420px);
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
+      overscroll-behavior: contain;
     }
     .panel-loading {
       margin: 0;

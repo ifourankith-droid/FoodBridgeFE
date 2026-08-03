@@ -80,6 +80,7 @@ export class FbPopoverHeader {
         [ngClass]="panelClass()"
         [class.pm-end]="align() === 'end'"
         [class.pm-up]="dropUp()"
+        [class.pm-panel-scrolls]="panelScrolls()"
         role="dialog"
         [attr.aria-label]="ariaLabel() || null"
       >
@@ -148,6 +149,20 @@ export class FbPopoverHeader {
     .pm-popover.pm-up {
       top: auto;
       bottom: calc(100% + 8px);
+    }
+    /* For panels that scroll a region of their own (a list under a pinned header
+       and footer). Without this the popover ALSO scrolls, so the panel showed two
+       scrollbars side by side and its footer could be scrolled out of reach — the
+       one place "View all notifications" lives. Becoming a flex column is what
+       lets the panel's own scroller take the leftover height. */
+    .pm-popover.pm-panel-scrolls {
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .pm-popover.pm-panel-scrolls > * {
+      flex: 1 1 auto;
+      min-height: 0;
     }
 
     /* ---- Mobile: centred modal in the top layer ---- */
@@ -293,6 +308,13 @@ export class FbPopoverMenu {
   readonly panelClass = input('');
   /** Accessible label for the popover / modal. */
   readonly ariaLabel = input('');
+  /**
+   * The projected panel scrolls a region of its own, so the popover must not also
+   * scroll. Set it for any panel with a pinned header or footer — leaving both
+   * scrollable stacks two scrollbars and lets the footer slide out of reach.
+   * Default false, so simple menus keep scrolling as a whole.
+   */
+  readonly panelScrolls = input(false);
   /**
    * Title shown at the left of the mobile modal's header bar — "what this is
    * for". Defaults to {@link ariaLabel}; pass `''` to suppress it where the

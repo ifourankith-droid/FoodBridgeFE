@@ -44,16 +44,15 @@ import {
       gap: 7px;
       flex-wrap: wrap;
     }
-    /* The dropdown is too narrow to wrap gracefully — scroll the row instead so
-       the panel keeps a fixed height. */
+    /* Wraps, rather than scrolling sideways with a hidden scrollbar as it used to.
+       Four chips need ~460px and the dropdown is 380px, so the last one ("Donations")
+       sat permanently half-cut at the panel's edge with no visible affordance saying
+       it could be scrolled to — it just read as broken. Wrapping was originally
+       rejected to keep the panel a fixed height, but the list is a flex region now,
+       so the second chip row costs it height rather than the panel. */
     .chips.is-compact {
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      padding-bottom: 1px;
-    }
-    .chips.is-compact::-webkit-scrollbar {
-      display: none;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
     .chip {
@@ -136,7 +135,7 @@ export class NotificationFilters {
 
   readonly showCounts = input(true);
 
-  /** Scrolling single-line row with smaller chips — for the bell dropdown. */
+  /** Smaller, tighter chips that wrap — for the narrow bell dropdown. */
   readonly compact = input(false);
 
   readonly filters = input<readonly NotificationFilterDef[]>(NOTIFICATION_FILTERS);

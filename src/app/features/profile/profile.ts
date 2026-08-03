@@ -40,9 +40,49 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
       description="Your details, contact number and the location we match you from."
     >
       @if (loading()) {
-        <div class="card-fb p-5 max-w-xl text-muted">
-          <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading your profile…
+        <!-- Mirrors the loaded layout: same grid, same card widths, avatar circle
+             and field stack in the same places — so the page doesn't jump when the
+             profile arrives. Donor-ness comes from the session (see
+             skeletonIsDonor), which is known before the fetch returns. -->
+        <div
+          class="grid gap-4 items-start"
+          [ngClass]="skeletonIsDonor() ? 'lg:grid-cols-2 max-w-5xl' : 'max-w-xl'"
+          aria-hidden="true"
+        >
+          <div class="sk-card min-w-0 !p-5">
+            <div class="flex items-center gap-3 mb-5">
+              <div class="sk h-16 w-16 !rounded-full shrink-0"></div>
+              <div class="min-w-0 flex-1">
+                <div class="sk h-5 w-2/3 mb-2"></div>
+                <div class="sk h-4 w-1/2"></div>
+              </div>
+            </div>
+            @for (s of formSkeletons; track $index) {
+              <div class="mb-4">
+                <div class="sk h-3 w-24 mb-2"></div>
+                <div class="sk h-11 w-full"></div>
+              </div>
+            }
+            <div class="sk h-10 w-40 mt-5"></div>
+          </div>
+
+          @if (skeletonIsDonor()) {
+            <div class="sk-card min-w-0 !p-5">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="sk h-9 w-9 shrink-0"></div>
+                <div class="min-w-0 flex-1">
+                  <div class="sk h-4 w-40 mb-2"></div>
+                  <div class="sk h-3 w-28"></div>
+                </div>
+                <div class="sk h-8 w-28 shrink-0"></div>
+              </div>
+              @for (s of addressSkeletons; track $index) {
+                <div class="sk h-14 w-full mb-2"></div>
+              }
+            </div>
+          }
         </div>
+        <p class="sr-only" role="status">Loading your profile…</p>
       } @else if (profile(); as u) {
         <div
           class="grid gap-4 items-start"
@@ -528,6 +568,20 @@ export class Profile {
   protected readonly profile = signal<UserProfile | null>(null);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
+
+  /** Placeholder rows for the loading skeleton — one per field the form renders. */
+  protected readonly formSkeletons = Array.from({ length: 5 });
+  protected readonly addressSkeletons = Array.from({ length: 2 });
+
+  /**
+   * Donor-ness for the **skeleton**, taken from the session rather than
+   * {@link isDonor}, which reads the fetched profile and is therefore always false
+   * while loading. Using it there drew one card and then two once the data landed —
+   * precisely the layout jump the skeleton is meant to absorb.
+   */
+  protected readonly skeletonIsDonor = computed(
+    () => this.auth.currentUser()?.role?.toLowerCase() === 'donor',
+  );
 
   /** The complete address on one line for the identity header. */
   protected readonly fullAddress = computed(() => formatAddress(this.profile()));

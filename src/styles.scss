@@ -412,6 +412,39 @@ body.fb-dialog-open {
     @apply text-muted text-xs mt-2;
   }
 
+  /* ---- Skeleton placeholders ----
+     Global rather than scoped to listing-grid, which is where they started: the
+     profile and certificate pages needed the same shimmer, and a second copy is
+     how two skeletons end up animating at different speeds. `.sk` is a bar,
+     `.sk-card` the surface it sits on; size each bar with utilities at the call
+     site so the placeholder traces the real content's shape. */
+  .sk-card {
+    background: var(--fb-surface);
+    border: 1px solid var(--fb-line);
+    border-radius: var(--fb-radius);
+    box-shadow: var(--fb-shadow);
+    padding: 16px;
+  }
+  .sk {
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--fb-line) 25%, var(--fb-bg) 37%, var(--fb-line) 63%);
+    background-size: 400% 100%;
+    animation: fb-shimmer 1.3s ease-in-out infinite;
+  }
+  @keyframes fb-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sk {
+      animation: none;
+    }
+  }
+
   /* Phone number field with prefix */
   .fb-phone {
     @apply flex items-stretch rounded-xl border overflow-hidden transition-shadow;

@@ -16,7 +16,20 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
       description="CSR-ready proof for every confirmed donation."
     >
       @if (loading()) {
-        <div class="card-fb p-6 text-muted"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading certificates…</div>
+        <!-- Traces the real card: award mark, number, meta line, download button.
+             Same grid and gap as the loaded state, so nothing shifts position when
+             the data lands — the point of a skeleton over a spinner. -->
+        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+          @for (s of skeletons; track $index) {
+            <div class="sk-card flex flex-col items-center">
+              <div class="sk h-9 w-9 !rounded-full mb-3"></div>
+              <div class="sk h-4 w-2/3 mb-2"></div>
+              <div class="sk h-3 w-1/2 mb-4"></div>
+              <div class="sk h-9 w-full"></div>
+            </div>
+          }
+        </div>
+        <p class="sr-only" role="status">Loading certificates…</p>
       } @else {
         <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           @for (c of certificates(); track c.id) {
@@ -45,6 +58,8 @@ export class Certificates {
 
   protected readonly certificates = signal<Certificate[]>([]);
   protected readonly loading = signal(true);
+  /** Placeholder cards while loading — six fills the grid at every breakpoint. */
+  protected readonly skeletons = Array.from({ length: 6 });
   protected readonly downloadingId = signal<string | null>(null);
 
   constructor() {
