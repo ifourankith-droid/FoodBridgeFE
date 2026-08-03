@@ -10,8 +10,7 @@ import { catchError, map, throwError } from 'rxjs';
 import { environment } from '@env/environment';
 import { API_ENDPOINTS } from '../config/api-endpoints';
 import { APP_ROUTES } from '../config/app-routes';
-import { AUTH_TOKEN_KEY, AuthService } from '../services/auth.service';
-import { StorageService } from '../services/storage.service';
+import { AuthService } from '../services/auth.service';
 import { ToastService } from '../services/toast.service';
 import { ApiError } from './api-error';
 
@@ -34,10 +33,27 @@ function isEnvelope(body: unknown): body is ApiEnvelope {
   );
 }
 
-/** Attaches the stored JWT as a Bearer token to same-API requests. */
+/**
+ * Attaches the current JWT as a Bearer token to same-API requests.
+ *
+ * Reads `AuthService.token()` — the signal — **not** localStorage. It used to read the stored copy,
+ * which is written by an `effect()` and therefore lands a tick *after* the signal is set. Any request
+ * fired in that gap went out with no `Authorization` header at all (or, worse, the previous session's
+ * stale token) and came back 401; `sessionExpiryInterceptor` then signed the user out with "Your
+ * session has expired".
+ *
+ * That gap is exactly what registration and login hit: `register()`/`verifyOtp()` set the token and
+ * navigate to `/app` in the same turn, so whichever component loads first can beat the write. It
+ * showed up as a **volunteer-only** bug because the volunteer dashboard is the one that immediately
+ * calls `GET /users/{id}/verification` for the verification banner — donors and admins make no such
+ * call on load, so they never raced it.
+ *
+ * The signal is the single source of truth and is initialised from storage on construction, so a page
+ * reload still authenticates. There is no cycle risk in injecting AuthService here —
+ * `sessionExpiryInterceptor` already does, and `inject()` resolves lazily per request.
+ */
 export const authTokenInterceptor: HttpInterceptorFn = (req, next) => {
-  const storage = inject(StorageService);
-  const token = storage.getItem<string>(AUTH_TOKEN_KEY);
+  const token = inject(AuthService).token();
 
   if (token && req.url.startsWith(environment.apiUrl)) {
     return next(req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }));
