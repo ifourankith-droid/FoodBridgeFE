@@ -56,7 +56,7 @@ import { FbLogo } from '@shared/ui/logo/logo';
       border-radius: 50%;
       bottom: -120px;
       left: -110px;
-      background: rgb(var(--fb-accent-rgb) / 0.35);
+      background: rgb(var(--fb-primary-rgb) / 0.35);
       filter: blur(8px);
     }
     .auth-brand-content {

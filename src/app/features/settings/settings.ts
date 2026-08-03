@@ -8,7 +8,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Settings"
+      [title]="'Settings'"
       description="Appearance, notifications and account preferences."
     >
       <div class="card-fb p-5 max-w-xl divide-y divide-line">

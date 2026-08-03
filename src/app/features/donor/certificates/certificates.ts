@@ -12,7 +12,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Certificates"
+      [title]="'Certificates'"
       description="CSR-ready proof for every confirmed donation."
     >
       @if (loading()) {

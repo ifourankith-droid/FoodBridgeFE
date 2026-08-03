@@ -48,7 +48,7 @@ interface VerificationStep {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Account verification"
+      [title]="'Account verification'"
       description="We check every volunteer before they can collect food from a donor."
       [hasAside]="true"
       [hasFilters]="false"

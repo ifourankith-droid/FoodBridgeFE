@@ -29,7 +29,7 @@ const MEDALS = ['gold', 'silver', 'bronze'] as const;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Leaderboard"
+      [title]="'Leaderboard'"
       description="Top volunteers by rescue points — one point per meal delivered and confirmed."
       [hasActions]="true"
       [hasAside]="true"

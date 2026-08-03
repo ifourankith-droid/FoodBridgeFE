@@ -71,7 +71,7 @@ interface TrackRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Track Delivery"
+      [title]="'Track Delivery'"
       description="Follow your incoming food in real time — from pickup to your doorstep."
       [hasActions]="true"
     >
@@ -162,7 +162,7 @@ interface TrackRow {
           <div class="card-fb">
             <app-empty-state
               icon="fa-solid fa-location-crosshairs"
-              title="Nothing in transit"
+              [title]="'Nothing in transit'"
               text="Once you accept an incoming donation it appears here with a live map."
             />
           </div>

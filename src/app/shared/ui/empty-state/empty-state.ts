@@ -15,7 +15,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
  *
  *   <app-empty-state
  *     icon="fa-solid fa-award"
- *     title="No certificates yet"
+ *     [title]="'No certificates yet'"
  *     text="Complete a delivery and your first certificate lands here."
  *     actionLabel="Browse listings"
  *     (action)="goToListings()" />

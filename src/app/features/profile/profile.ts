@@ -36,7 +36,7 @@ const ADDR_FIELDS = ['label', 'address', 'state', 'pincode'] as const;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Profile"
+      [title]="'Profile'"
       description="Your details, contact number and the location we match you from."
     >
       @if (loading()) {

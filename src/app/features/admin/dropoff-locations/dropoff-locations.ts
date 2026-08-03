@@ -28,7 +28,7 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Drop-off Locations"
+      [title]="'Drop-off Locations'"
       description="Fallback points a volunteer takes food to when no NGO can be matched."
       [hasActions]="true"
       [hasAside]="true"
@@ -195,7 +195,7 @@ import { SummaryHeader } from '@shared/ui/summary-header/summary-header';
         <div class="card-fb">
           <app-empty-state
             icon="fa-solid fa-box-open"
-            title="No drop-off locations yet"
+            [title]="'No drop-off locations yet'"
             text="Add the places volunteers can leave food when no NGO is available to receive it."
             actionLabel="Add location"
             actionIcon="fa-solid fa-circle-plus"

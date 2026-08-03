@@ -29,7 +29,7 @@ import { ResolveDisputeDialog } from './resolve-dispute-dialog';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Dispute Resolution"
+      [title]="'Dispute Resolution'"
       description="Investigate and resolve issues raised on deliveries."
       [hasActions]="true"
       [hasAside]="true"
@@ -109,7 +109,7 @@ import { ResolveDisputeDialog } from './resolve-dispute-dialog';
               <app-empty-state
                 tone="positive"
                 icon="fa-solid fa-circle-check"
-                title="No open disputes"
+                [title]="'No open disputes'"
                 text="Everything is clear. New reports appear here as soon as they are raised."
               />
             </div>

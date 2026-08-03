@@ -80,7 +80,7 @@ function toCard(l: AdminListingSummary): ListingCardData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="All Listings"
+      [title]="'All Listings'"
       description="Full live status trail across every listing on the platform."
       [hasActions]="true"
       [hasAside]="true"

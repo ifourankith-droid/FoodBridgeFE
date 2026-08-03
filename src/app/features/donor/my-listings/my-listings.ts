@@ -41,7 +41,7 @@ const LOAD_LIMIT = 500;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="My Donations"
+      [title]="'My Donations'"
       description="Track every donation from post to certificate."
       [hasActions]="true"
       [hasAside]="true"

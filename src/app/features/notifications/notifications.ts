@@ -46,7 +46,7 @@ function isCategory(id: NotificationFilter): id is NotificationCategory {
   imports: [EmptyState, FbButton, InfiniteScroll, NotificationFilters, NotificationItem, RouterLink, PageWrapper],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-page-wrapper title="Notifications" [description]="inboxSummary()" [hasActions]="true">
+    <app-page-wrapper [title]="'Notifications'" [description]="inboxSummary()" [hasActions]="true">
       <ng-container pageActions>
         <app-button
           variant="outline"

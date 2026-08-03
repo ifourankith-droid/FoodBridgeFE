@@ -48,7 +48,7 @@ const MONTHS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Platform Reports"
+      [title]="'Platform Reports'"
       description="CSR-ready, platform-wide impact for funders and partners."
       [hasActions]="true"
       [hasAside]="true"
@@ -132,7 +132,7 @@ const MONTHS = [
             <app-empty-state
               icon="fa-solid fa-chart-column"
               size="sm"
-              title="Nothing to chart yet"
+              [title]="'Nothing to chart yet'"
               text="Confirmed donations are grouped by month and appear here."
             />
           }
@@ -141,7 +141,7 @@ const MONTHS = [
         <div class="card-fb">
           <app-empty-state
             icon="fa-solid fa-chart-column"
-            title="No report available"
+            [title]="'No report available'"
             text="We couldn't load the platform report. Try refreshing in a moment."
             actionLabel="Retry"
             actionIcon="fa-solid fa-rotate"

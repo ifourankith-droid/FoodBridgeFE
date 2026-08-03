@@ -62,7 +62,7 @@ function toggle(list: readonly string[], value: string): string[] {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-listing-layout
-      title="Verifications"
+      [title]="'Verifications'"
       description="Approve or suspend volunteers and organizations. A recipient receives no food until verified."
       [hasActions]="true"
       [hasAside]="true"
@@ -267,7 +267,7 @@ function toggle(list: readonly string[], value: string): string[] {
         <div class="card-fb">
           <app-empty-state
             icon="fa-solid fa-user-shield"
-            title="No accounts match these filters"
+            [title]="'No accounts match these filters'"
             text="Try widening the status or role filter above."
             actionLabel="Clear filters"
             actionIcon="fa-solid fa-filter-circle-xmark"

@@ -31,7 +31,7 @@ import { FbSelect } from '@shared/ui/select/select';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Incoming Food"
+      [title]="'Incoming Food'"
       description="Accept to confirm you'll receive it, or reject to free it up for another NGO."
     >
       @if (blocker(); as b) {

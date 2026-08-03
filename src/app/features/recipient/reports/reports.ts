@@ -49,7 +49,7 @@ const MONTHS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-page-wrapper
-      title="Reports"
+      [title]="'Reports'"
       description="Statistics for your own records and funders — every confirmed receipt, month by month."
       [hasActions]="true"
     >
@@ -119,7 +119,7 @@ const MONTHS = [
               <app-empty-state
                 icon="fa-solid fa-chart-column"
                 size="sm"
-                title="Nothing to chart yet"
+                [title]="'Nothing to chart yet'"
                 text="Confirmed receipts are grouped by month and appear here."
               />
             }
@@ -155,7 +155,7 @@ const MONTHS = [
         <div class="card-fb">
           <app-empty-state
             icon="fa-solid fa-chart-column"
-            title="No report available"
+            [title]="'No report available'"
             text="We couldn't load your statistics. Try refreshing in a moment."
             actionLabel="Retry"
             actionIcon="fa-solid fa-rotate"

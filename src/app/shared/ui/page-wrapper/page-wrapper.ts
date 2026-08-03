@@ -11,7 +11,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * shell chrome has no heading of its own, so each view supplies the document's.
  *
  * @example
- * <app-page-wrapper title="My Deliveries" description="Confirm each step." [hasActions]="true">
+ * <app-page-wrapper [title]="'My Deliveries'" description="Confirm each step." [hasActions]="true">
  *   <div pageActions>
  *     <app-button icon="fa-solid fa-rotate" (clicked)="reload()">Refresh</app-button>
  *   </div>

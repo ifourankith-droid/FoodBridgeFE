@@ -6,6 +6,47 @@ backend changes are logged in `../../FoodBridgeBE/KNOWLEDGE.md`.
 
 ---
 
+## `title="…"` on a component renders a native browser tooltip
+
+**Done by me on 2026-08-03**
+
+### The trap
+`title` is both a component input **and** a global HTML attribute. Written as a static
+attribute, Angular does two things with it: sets the input *and* leaves it on the host
+element in the DOM. The browser then shows its native tooltip on hover over the page
+heading — on every page, because every page has a heading.
+
+```html
+<app-listing-layout title="Account verification">   <!-- input set AND title attr in DOM -->
+<app-listing-layout [title]="'Account verification'"> <!-- input only, no attribute -->
+```
+
+A property binding compiles to `ɵɵproperty('title', …)`, which writes the input and
+never touches the attribute. That is the whole fix.
+
+Worth remembering: this is what the small floating "Account verification" box in the
+first Verification-page screenshot was. It was read as a screenshot annotation at the
+time, and the genuine layout gap next to it (the grid-track bug, logged separately)
+masked it.
+
+### Scope
+Four components declare a `title` input: `PageWrapper`, `ListingLayout`, `EmptyState`,
+`Placeholder`. Every static `title="…"` on those — 22 call sites — is now
+`[title]="'…'"`, along with the three doc-comment examples so the wrong pattern does
+not get copied out of them.
+
+**Native `<button title>` / `<a title>` were deliberately left alone** — those tooltips
+are intended (Edit, Remove, Toggle sidebar, …). The distinction is the element, not the
+attribute: a dash in the tag name means it is a component.
+
+### Verified in the DOM, not by grep
+A grep for the pattern can't see past a `>` inside an earlier attribute value (e.g.
+`[searchable]="x > 5"`), so the check was done at runtime instead: across 12 routes,
+`document.querySelectorAll('[title]')` filtered to dashed tag names returned **0**,
+while 13–58 native tooltips per page were preserved.
+
+---
+
 ## Notification dropdown: two scrollbars, a clipped filter, an unreachable footer
 
 **Done by me on 2026-08-03**

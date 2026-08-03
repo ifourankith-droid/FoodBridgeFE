@@ -30,7 +30,7 @@ import { PageWrapper } from '@shared/ui/page-wrapper/page-wrapper';
  *                     "Overview" toggle placed under the summary (not the list).
  *
  * @example
- * <app-listing-layout title="My Donations" description="…" [hasActions]="true"
+ * <app-listing-layout [title]="'My Donations'" description="…" [hasActions]="true"
  *   [hasAside]="true" [loading]="loading()" [empty]="!rows().length"
  *   emptyText="No donations yet" gridClass="lg:grid-cols-2">
  *   <div pageActions>…</div>
